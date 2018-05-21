@@ -8,6 +8,7 @@ use signal::Signal;
 use std::time::Duration;
 
 #[derive(StructOpt, Debug)]
+#[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
 /// Reads a list of commands to gracefully terminate from STDIN.
 pub struct CliOptions {
     /// Number of seconds to wait for processes to terminate. Use 0 to disable waiting and exit
