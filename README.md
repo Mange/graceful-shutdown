@@ -33,6 +33,11 @@ time can also be disabled, as well as the final kill strike.
 
 To list supported signals you can invoke the command with `--list-signals`.
 
+## Platform support
+
+Currently this software is only supported on Linux. It is possible to add more
+platforms if someone would care to add support for them; PRs are welcome.
+
 ## Copyright
 
 Copyright 2018 Magnus Bergmark <magnus.bergmark@gmail.com>
