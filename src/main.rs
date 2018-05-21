@@ -36,11 +36,23 @@ fn list_signals(verbose: bool) {
     };
 }
 
+fn generate_completions(shell: structopt::clap::Shell) {
+    let mut app = CliOptions::clap();
+    let name = app.get_name().to_string();
+
+    app.gen_completions_to(name, shell, &mut io::stdout());
+}
+
 fn main() {
     let cli_options = CliOptions::from_args();
 
     if cli_options.list_signals {
         list_signals(cli_options.verbose);
+        return;
+    }
+
+    if let Some(shell) = cli_options.generate_completions {
+        generate_completions(shell);
         return;
     }
 

@@ -1,5 +1,9 @@
+extern crate structopt;
+use structopt::clap::Shell;
+
 extern crate users;
 use users::uid_t;
+
 use signal::Signal;
 use std::time::Duration;
 
@@ -52,6 +56,11 @@ pub struct CliOptions {
     /// List all supported signals and exit.
     #[structopt(long = "list-signals")]
     pub list_signals: bool,
+
+    /// Generate completion script for a given shell and output on STDOUT.
+    #[structopt(long = "generate-completions", value_name = "SHELL",
+                raw(possible_values = "&Shell::variants()"))]
+    pub generate_completions: Option<Shell>,
 }
 
 #[derive(Debug)]
