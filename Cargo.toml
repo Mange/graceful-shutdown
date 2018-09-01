@@ -9,8 +9,8 @@ readme = "README.md"
 license = "MIT"
 
 [dependencies]
-structopt = "0.2.8"
-libc = "0.2.40"
-regex = "1.0.0"
-users = "0.6.1"
+structopt = "0.2.10"
+libc = "0.2.43"
+regex = "1.0.4"
+users = "0.7.0"
 termion = "1.5.1"
