@@ -1,28 +1,24 @@
 #[macro_use]
 extern crate structopt;
-use structopt::StructOpt;
-
 extern crate regex;
-use regex::{RegexSet, RegexSetBuilder};
-
-extern crate atty;
-
+extern crate termion;
 extern crate users;
 
+mod matcher;
+mod options;
+mod processes;
+mod signal;
+
+use matcher::Matcher;
+use regex::{RegexSet, RegexSetBuilder};
+use signal::Signal;
 use std::io;
 use std::io::BufRead;
 use std::time::{Duration, Instant};
+use structopt::StructOpt;
 
-mod signal;
-use signal::Signal;
-
-mod matcher;
-use matcher::Matcher;
-
-mod processes;
 use processes::Process;
 
-mod options;
 use options::{CliOptions, Options, OutputMode};
 
 fn list_signals(verbose: bool) {
@@ -94,7 +90,7 @@ fn run(options: Options) -> Result<bool, String> {
 }
 
 fn load_patterns(output_mode: OutputMode) -> Result<RegexSet, String> {
-    if output_mode.show_normal() && atty::is(atty::Stream::Stdin) {
+    if output_mode.show_normal() && termion::is_tty(&::std::io::stdin()) {
         eprintln!("WARNING: Reading processlist from TTY stdin. Exit with ^D when you are done, or ^C to abort.");
     }
 
