@@ -8,6 +8,13 @@ use matcher::MatchMode;
 use signal::Signal;
 use std::time::Duration;
 
+#[derive(Debug, Clone, Copy)]
+pub enum OutputMode {
+    Normal,
+    Verbose,
+    Quiet,
+}
+
 #[derive(StructOpt, Debug)]
 #[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
 /// Reads a list of commands to gracefully terminate from STDIN.
@@ -61,13 +68,18 @@ pub struct CliOptions {
     #[structopt(short = "m", long = "mine")]
     mine: bool,
 
-    /// Don't actually send any signals to processes. Useful when testing configuration.
+    /// Don't actually send any signals to processes, instead show what actions would take place.
+    /// Useful when testing configuration. This implies --verbose.
     #[structopt(short = "n", long = "dry-run")]
     dry_run: bool,
 
     /// Show more verbose output.
-    #[structopt(short = "v", long = "verbose")]
+    #[structopt(short = "v", long = "verbose", overrides_with = "quiet")]
     pub verbose: bool,
+
+    /// Don't render any output.
+    #[structopt(short = "q", long = "quiet", overrides_with = "verbose")]
+    pub quiet: bool,
 
     /// List all supported signals and exit.
     #[structopt(long = "list-signals")]
@@ -91,7 +103,7 @@ pub struct Options {
     pub kill_signal: Signal,
     pub user: Option<uid_t>,
     pub dry_run: bool,
-    pub verbose: bool,
+    pub output_mode: OutputMode,
 }
 
 impl From<CliOptions> for Options {
@@ -124,6 +136,19 @@ impl From<CliOptions> for Options {
             MatchMode::Basename
         };
 
+        let output_mode = match (cli_options.dry_run, cli_options.verbose, cli_options.quiet) {
+            // dry-run implies --verbose. Ignore the --quiet and --verbose flags!
+            (true, _, _) => OutputMode::Verbose,
+
+            // If not dry-run, then check the other flags.
+            (false, false, false) => OutputMode::Normal,
+            (false, true, false) => OutputMode::Verbose,
+            (false, false, true) => OutputMode::Quiet,
+
+            // Should never happen!
+            (false, true, true) => unreachable!("Should not happen due to overrides_with option"),
+        };
+
         Options {
             match_mode,
             dry_run: cli_options.dry_run,
@@ -131,8 +156,24 @@ impl From<CliOptions> for Options {
             kill_signal: cli_options.kill_signal,
             terminate_signal: cli_options.terminate_signal,
             user,
-            verbose: cli_options.verbose,
+            output_mode,
             wait_time,
+        }
+    }
+}
+
+impl OutputMode {
+    pub fn show_normal(&self) -> bool {
+        match self {
+            OutputMode::Verbose | OutputMode::Normal => true,
+            OutputMode::Quiet => false,
+        }
+    }
+
+    pub fn show_verbose(&self) -> bool {
+        match self {
+            OutputMode::Verbose => true,
+            OutputMode::Normal | OutputMode::Quiet => false,
         }
     }
 }

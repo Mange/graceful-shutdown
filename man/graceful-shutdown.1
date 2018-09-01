@@ -12,7 +12,8 @@ graceful\-shutdown [FLAGS] [OPTIONS]
 .SS "FLAGS:"
 .TP
 \fB\-n\fR, \fB\-\-dry\-run\fR
-Don't actually send any signals to processes. Useful when testing configuration.
+Don't actually send any signals to processes, instead show what actions would take place.
+Useful when testing configuration. This implies \fB\-\-verbose\fR.
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Prints help information
@@ -31,6 +32,9 @@ specified.
 Do not try to kill processes that do not exit within the waiting time, if a waiting time is
 set. Exits with an error status code if any matched process was still alive when waiting time
 is up.
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Don't render any output.
 .TP
 \fB\-V\fR, \fB\-\-version\fR
 Prints version information

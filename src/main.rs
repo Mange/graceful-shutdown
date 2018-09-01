@@ -23,7 +23,7 @@ mod processes;
 use processes::Process;
 
 mod options;
-use options::{CliOptions, Options};
+use options::{CliOptions, Options, OutputMode};
 
 fn list_signals(verbose: bool) {
     if verbose {
@@ -50,6 +50,9 @@ fn main() {
     use std::process::exit;
     let cli_options = CliOptions::from_args();
 
+    // No need to parse the raw verbose flag into a OutputMode here as the method itself has only
+    // one purpose: To show information to the user. Considering that, it should always ignore
+    // --quiet.
     if cli_options.list_signals {
         list_signals(cli_options.verbose);
         return;
@@ -61,6 +64,7 @@ fn main() {
     }
 
     let options = Options::from(cli_options);
+    let output_mode = options.output_mode;
     match run(options) {
         Ok(success) => if success {
             exit(0)
@@ -68,14 +72,16 @@ fn main() {
             exit(1)
         },
         Err(err) => {
-            eprintln!("ERROR: {}", err);
+            if output_mode.show_normal() {
+                eprintln!("ERROR: {}", err);
+            }
             exit(1);
         }
     }
 }
 
 fn run(options: Options) -> Result<bool, String> {
-    let matcher = Matcher::new(load_patterns()?, options.match_mode);
+    let matcher = Matcher::new(load_patterns(options.output_mode)?, options.match_mode);
 
     let processes = all_processes(&options, &matcher)?;
 
@@ -87,8 +93,8 @@ fn run(options: Options) -> Result<bool, String> {
     }
 }
 
-fn load_patterns() -> Result<RegexSet, String> {
-    if atty::is(atty::Stream::Stdin) {
+fn load_patterns(output_mode: OutputMode) -> Result<RegexSet, String> {
+    if output_mode.show_normal() && atty::is(atty::Stream::Stdin) {
         eprintln!("WARNING: Reading processlist from TTY stdin. Exit with ^D when you are done, or ^C to abort.");
     }
 
@@ -128,6 +134,12 @@ fn strip_comment(line: String) -> String {
 
 fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, String> {
     use matcher::MatchMode;
+
+    // If we're not rendering anything, might as well skip the iteration completely.
+    if !options.output_mode.show_normal() {
+        return Ok(true);
+    }
+
     for process in processes {
         let name = match options.match_mode {
             MatchMode::Basename => {
@@ -151,7 +163,7 @@ fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, String> {
 
 fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, String> {
     for process in &processes {
-        if options.verbose {
+        if options.output_mode.show_verbose() {
             eprintln!(
                 "Sending {} to process {} ({})",
                 options.terminate_signal,
@@ -173,7 +185,7 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
             processes.retain(|process| {
                 let is_alive = process.is_alive();
 
-                if options.verbose && !is_alive {
+                if options.output_mode.show_verbose() && !is_alive {
                     eprintln!(
                         "Process {} ({}) has shut down",
                         process.pid(),
@@ -191,11 +203,11 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
 
         // Time is up. Kill remaining processes.
         if options.kill {
-            if options.verbose {
+            if options.output_mode.show_verbose() {
                 eprintln!("Timeout reached. Forcefully shutting down processes.");
             }
             for process in &processes {
-                if options.verbose {
+                if options.output_mode.show_verbose() {
                     eprintln!(
                         "Sending {} to process {} ({})",
                         options.kill_signal,
@@ -206,8 +218,10 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
                 process.send(options.kill_signal);
             }
         } else {
-            eprintln!("WARNING: Some processes are still alive.");
-            if options.verbose {
+            if options.output_mode.show_normal() {
+                eprintln!("WARNING: Some processes are still alive.");
+            }
+            if options.output_mode.show_verbose() {
                 for process in &processes {
                     eprintln!("Process {} ({})", process.pid(), process.name());
                 }
