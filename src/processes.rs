@@ -3,8 +3,8 @@ extern crate users;
 use users::uid_t;
 
 use std::fs::{read_dir, DirEntry, File, ReadDir};
-use std::path::{Path, PathBuf};
 use std::io::Read;
+use std::path::{Path, PathBuf};
 
 use signal::Signal;
 
@@ -15,6 +15,7 @@ pub struct Process {
     pid: i32,
     user_id: uid_t,
     name: String,
+    cmdline: String,
 }
 
 pub struct ProcessIterator {
@@ -100,6 +101,7 @@ impl Process {
     fn from_entry(entry: DirEntry) -> Result<Process, String> {
         let path = entry.path();
         let name = read_file(&path.join("comm"))?.trim_right().to_string();
+        let cmdline = parse_cmdline(&read_file(&path.join("cmdline"))?);
         let pid = {
             let basename = entry.file_name();
             let basename = basename.to_string_lossy();
@@ -110,6 +112,7 @@ impl Process {
 
         Ok(Process {
             name,
+            cmdline,
             pid,
             user_id: uid_of_file(&path)?,
         })
@@ -117,6 +120,10 @@ impl Process {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn commandline(&self) -> &str {
+        &self.cmdline
     }
 
     pub fn pid(&self) -> i32 {
@@ -156,4 +163,21 @@ fn uid_of_file(path: &Path) -> Result<uid_t, String> {
     path.metadata()
         .map_err(|err| format!("Could not stat {}: {}", path.display(), err))
         .map(|metadata| metadata.st_uid())
+}
+
+fn parse_cmdline(cmdline: &str) -> String {
+    cmdline.replace("\0", " ").trim_right().to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_parses_cmdlines() {
+        let input = "/usr/bin/bash\0-c\0echo hello world\0";
+        let expected_output = "/usr/bin/bash -c echo hello world";
+
+        assert_eq!(&parse_cmdline(input), expected_output);
+    }
 }

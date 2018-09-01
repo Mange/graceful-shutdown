@@ -4,6 +4,7 @@ use structopt::clap::Shell;
 extern crate users;
 use users::uid_t;
 
+use matcher::MatchMode;
 use signal::Signal;
 use std::time::Duration;
 
@@ -25,17 +26,30 @@ pub struct CliOptions {
     ///
     /// Signals can be specified using signal number or symbolic name (case insensitive, with or
     /// without the SIG prefix).
-    #[structopt(short = "s", long = "terminate-signal", default_value = "term",
-                value_name = "SIGNAL", parse(try_from_str = "parse_signal"))]
+    #[structopt(
+        short = "s",
+        long = "terminate-signal",
+        default_value = "term",
+        value_name = "SIGNAL",
+        parse(try_from_str = "parse_signal")
+    )]
     terminate_signal: Signal,
 
     /// Signal to use when killing processes that did not quit before the wait time ran out.
     ///
     /// Signals can be specified using signal number or symbolic name (case insensitive, with or
     /// without the SIG prefix).
-    #[structopt(long = "kill-signal", default_value = "kill", value_name = "SIGNAL",
-                parse(try_from_str = "parse_signal"))]
+    #[structopt(
+        long = "kill-signal",
+        default_value = "kill",
+        value_name = "SIGNAL",
+        parse(try_from_str = "parse_signal")
+    )]
     kill_signal: Signal,
+
+    /// Match the whole commandline for the process rather than the basename.
+    #[structopt(short = "W", long = "whole-command", visible_alias = "whole")]
+    match_whole: bool,
 
     /// Only find processes owned by the user with the given name.
     #[structopt(short = "u", long = "user", value_name = "USER")]
@@ -59,13 +73,17 @@ pub struct CliOptions {
     pub list_signals: bool,
 
     /// Generate completion script for a given shell and output on STDOUT.
-    #[structopt(long = "generate-completions", value_name = "SHELL",
-                raw(possible_values = "&Shell::variants()"))]
+    #[structopt(
+        long = "generate-completions",
+        value_name = "SHELL",
+        raw(possible_values = "&Shell::variants()")
+    )]
     pub generate_completions: Option<Shell>,
 }
 
 #[derive(Debug)]
 pub struct Options {
+    pub match_mode: MatchMode,
     pub wait_time: Option<Duration>,
     pub kill: bool,
     pub terminate_signal: Signal,
@@ -99,7 +117,14 @@ impl From<CliOptions> for Options {
                 }
             });
 
+        let match_mode = if cli_options.match_whole {
+            MatchMode::Commandline
+        } else {
+            MatchMode::Basename
+        };
+
         Options {
+            match_mode,
             dry_run: cli_options.dry_run,
             kill: !cli_options.no_kill,
             kill_signal: cli_options.kill_signal,

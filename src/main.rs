@@ -16,6 +16,9 @@ use std::time::{Duration, Instant};
 mod signal;
 use signal::Signal;
 
+mod matcher;
+use matcher::Matcher;
+
 mod processes;
 use processes::Process;
 
@@ -67,9 +70,9 @@ fn main() {
 }
 
 fn run(options: Options) -> Result<(), String> {
-    let matchers = load_patterns()?;
+    let matcher = Matcher::new(load_patterns()?, options.match_mode);
 
-    let processes = all_processes(&options, &matchers)?;
+    let processes = all_processes(&options, &matcher)?;
 
     // Time to shut them down
     if options.dry_run {
@@ -99,16 +102,15 @@ fn load_patterns() -> Result<RegexSet, String> {
         .map_err(|err| err.to_string())
 }
 
-fn all_processes(options: &Options, matchers: &RegexSet) -> Result<Vec<Process>, String> {
+fn all_processes(options: &Options, matcher: &Matcher) -> Result<Vec<Process>, String> {
     let iter = match options.user {
         Some(ref uid) => Process::all_from_user(uid.to_owned())?,
         None => Process::all()?,
     };
 
-    Ok(iter.flat_map(|result| match result {
-        Ok(entry) => Some(entry),
-        Err(_) => None,
-    }).filter(|process| matchers.is_match(process.name()))
+    Ok(iter
+        .flat_map(Result::ok)
+        .filter(|process| matcher.is_match(process))
         .collect::<Vec<_>>())
 }
 
@@ -120,12 +122,22 @@ fn strip_comment(line: String) -> String {
 }
 
 fn dry_run(options: &Options, processes: &[Process]) -> Result<(), String> {
+    use matcher::MatchMode;
     for process in processes {
+        let name = match options.match_mode {
+            MatchMode::Basename => {
+                format!("{pid} ({name})", pid = process.pid(), name = process.name())
+            }
+            MatchMode::Commandline => format!(
+                "{pid} ({name}): {cmdline}",
+                pid = process.pid(),
+                name = process.name(),
+                cmdline = process.commandline()
+            ),
+        };
         println!(
-            "Would have sent {} to process {} ({})",
-            options.terminate_signal,
-            process.pid(),
-            process.name()
+            "Would have sent {} to process {}",
+            options.terminate_signal, name
         );
     }
 
