@@ -21,17 +21,21 @@ use processes::Process;
 
 use options::{CliOptions, Options, OutputMode};
 
-fn list_signals(verbose: bool) {
-    if verbose {
-        eprintln!("Currently supported signals:")
+fn list_signals() {
+    // Print user-centric text if stdout is to a terminal. If piping stdout to some other process,
+    // this text will not be shown.
+    let is_tty = termion::is_tty(&::std::io::stdout());
+
+    if is_tty {
+        println!("Currently supported signals:")
     };
 
     for signal in Signal::variants() {
         println!("{}\t{}", signal.number(), signal.name());
     }
 
-    if verbose {
-        eprintln!("Signal names does not require the SIG prefix, and are case-insensitive.");
+    if is_tty {
+        println!("Signal names does not require the SIG prefix, and are case-insensitive.");
     };
 }
 
@@ -46,11 +50,8 @@ fn main() {
     use std::process::exit;
     let cli_options = CliOptions::from_args();
 
-    // No need to parse the raw verbose flag into a OutputMode here as the method itself has only
-    // one purpose: To show information to the user. Considering that, it should always ignore
-    // --quiet.
     if cli_options.list_signals {
-        list_signals(cli_options.verbose);
+        list_signals();
         return;
     }
 
