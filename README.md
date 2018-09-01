@@ -43,7 +43,9 @@ echo "firefox" | graceful-shutdown --wait-time 15
 echo "^man$" | graceful-shutdown --wait-time 0
 
 # Wait, but give up after the timeout instead of killing the process
-echo "^[nmg]?vim" | graceful-shutdown --wait-time 30 --no-kill
+if ! echo "^[nmg]?vim" | graceful-shutdown --wait-time 30 --no-kill; then
+  echo "Failed to exit all instances of vim in 30 seconds…"
+fi
 ```
 
 ### Signals

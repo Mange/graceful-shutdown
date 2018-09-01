@@ -47,6 +47,7 @@ fn generate_completions(shell: structopt::clap::Shell) {
 }
 
 fn main() {
+    use std::process::exit;
     let cli_options = CliOptions::from_args();
 
     if cli_options.list_signals {
@@ -61,15 +62,19 @@ fn main() {
 
     let options = Options::from(cli_options);
     match run(options) {
-        Ok(_) => {}
+        Ok(success) => if success {
+            exit(0)
+        } else {
+            exit(1)
+        },
         Err(err) => {
             eprintln!("ERROR: {}", err);
-            ::std::process::exit(1);
+            exit(1);
         }
     }
 }
 
-fn run(options: Options) -> Result<(), String> {
+fn run(options: Options) -> Result<bool, String> {
     let matcher = Matcher::new(load_patterns()?, options.match_mode);
 
     let processes = all_processes(&options, &matcher)?;
@@ -121,7 +126,7 @@ fn strip_comment(line: String) -> String {
     }
 }
 
-fn dry_run(options: &Options, processes: &[Process]) -> Result<(), String> {
+fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, String> {
     use matcher::MatchMode;
     for process in processes {
         let name = match options.match_mode {
@@ -141,10 +146,10 @@ fn dry_run(options: &Options, processes: &[Process]) -> Result<(), String> {
         );
     }
 
-    Ok(())
+    Ok(true)
 }
 
-fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<(), String> {
+fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, String> {
     for process in &processes {
         if options.verbose {
             eprintln!(
@@ -180,7 +185,7 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<(), String
             });
 
             if processes.is_empty() {
-                return Ok(());
+                return Ok(true);
             }
         }
 
@@ -207,10 +212,11 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<(), String
                     eprintln!("Process {} ({})", process.pid(), process.name());
                 }
             }
+            return Ok(false);
         }
     }
 
-    Ok(())
+    Ok(true)
 }
 
 #[cfg(test)]

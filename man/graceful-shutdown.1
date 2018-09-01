@@ -29,7 +29,8 @@ specified.
 .TP
 \fB\-\-no\-kill\fR
 Do not try to kill processes that do not exit within the waiting time, if a waiting time is
-set.
+set. Exits with an error status code if any matched process was still alive when waiting time
+is up.
 .TP
 \fB\-V\fR, \fB\-\-version\fR
 Prints version information
@@ -60,4 +61,4 @@ Only find processes owned by the user with the given name.
 .TP
 \fB\-w\fR, \fB\-\-wait\-time\fR <SECONDS>
 Number of seconds to wait for processes to terminate. Use 0 to disable waiting
-and exit immediately. [default: 5.0]
+and exit immediately with a success status code. [default: 5.0]

@@ -13,12 +13,13 @@ use std::time::Duration;
 /// Reads a list of commands to gracefully terminate from STDIN.
 pub struct CliOptions {
     /// Number of seconds to wait for processes to terminate. Use 0 to disable waiting and exit
-    /// immediately.
+    /// immediately with a success status code.
     #[structopt(short = "w", long = "wait-time", default_value = "5.0", value_name = "SECONDS")]
     wait_time: f64,
 
     /// Do not try to kill processes that do not exit within the waiting time, if a waiting time is
-    /// set.
+    /// set. Exits with an error status code if any matched process was still alive when waiting
+    /// time is up.
     #[structopt(long = "no-kill")]
     no_kill: bool,
 
