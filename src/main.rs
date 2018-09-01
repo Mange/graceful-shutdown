@@ -133,28 +133,16 @@ fn strip_comment(line: String) -> String {
 }
 
 fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, String> {
-    use matcher::MatchMode;
-
     // If we're not rendering anything, might as well skip the iteration completely.
     if !options.output_mode.show_normal() {
         return Ok(true);
     }
 
     for process in processes {
-        let name = match options.match_mode {
-            MatchMode::Basename => {
-                format!("{pid} ({name})", pid = process.pid(), name = process.name())
-            }
-            MatchMode::Commandline => format!(
-                "{pid} ({name}): {cmdline}",
-                pid = process.pid(),
-                name = process.name(),
-                cmdline = process.commandline()
-            ),
-        };
         println!(
-            "Would have sent {} to process {}",
-            options.terminate_signal, name
+            "Would have sent {signal} to process {process}",
+            signal = options.terminate_signal,
+            process = human_process_description(options, process),
         );
     }
 
@@ -163,14 +151,7 @@ fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, String> {
 
 fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, String> {
     for process in &processes {
-        if options.output_mode.show_verbose() {
-            eprintln!(
-                "Sending {} to process {} ({})",
-                options.terminate_signal,
-                process.pid(),
-                process.name()
-            );
-        }
+        verbose_signal_message(options.terminate_signal, options, process);
         process.send(options.terminate_signal);
     }
 
@@ -187,9 +168,8 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
 
                 if options.output_mode.show_verbose() && !is_alive {
                     eprintln!(
-                        "Process {} ({}) has shut down",
-                        process.pid(),
-                        process.name()
+                        "Process shut down: {process}",
+                        process = human_process_description(options, process),
                     );
                 }
 
@@ -207,14 +187,7 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
                 eprintln!("Timeout reached. Forcefully shutting down processes.");
             }
             for process in &processes {
-                if options.output_mode.show_verbose() {
-                    eprintln!(
-                        "Sending {} to process {} ({})",
-                        options.kill_signal,
-                        process.pid(),
-                        process.name()
-                    );
-                }
+                verbose_signal_message(options.kill_signal, options, process);
                 process.send(options.kill_signal);
             }
         } else {
@@ -223,7 +196,10 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
             }
             if options.output_mode.show_verbose() {
                 for process in &processes {
-                    eprintln!("Process {} ({})", process.pid(), process.name());
+                    eprintln!(
+                        "Process {process}",
+                        process = human_process_description(options, process)
+                    );
                 }
             }
             return Ok(false);
@@ -231,6 +207,32 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
     }
 
     Ok(true)
+}
+
+fn verbose_signal_message(signal: Signal, options: &Options, process: &Process) {
+    if options.output_mode.show_verbose() {
+        eprintln!(
+            "Sending {signal} to process {process}",
+            signal = signal,
+            process = human_process_description(options, process),
+        );
+    }
+}
+
+fn human_process_description(options: &Options, process: &Process) -> String {
+    use matcher::MatchMode;
+
+    match options.match_mode {
+        MatchMode::Basename => {
+            format!("{pid} ({name})", pid = process.pid(), name = process.name())
+        }
+        MatchMode::Commandline => format!(
+            "{pid} ({name}): {cmdline}",
+            pid = process.pid(),
+            name = process.name(),
+            cmdline = process.commandline()
+        ),
+    }
 }
 
 #[cfg(test)]
