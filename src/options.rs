@@ -1,18 +1,25 @@
 extern crate structopt;
-use structopt::clap::Shell;
-
+extern crate termion;
 extern crate users;
-use users::uid_t;
 
 use matcher::MatchMode;
 use signal::Signal;
 use std::time::Duration;
+use structopt::clap::Shell;
+use users::uid_t;
 
 #[derive(Debug, Clone, Copy)]
 pub enum OutputMode {
     Normal,
     Verbose,
     Quiet,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ColorMode {
+    Auto,
+    Always,
+    Never,
 }
 
 #[derive(StructOpt, Debug)]
@@ -75,11 +82,17 @@ pub struct CliOptions {
 
     /// Show more verbose output.
     #[structopt(short = "v", long = "verbose", overrides_with = "quiet")]
-    pub verbose: bool,
+    verbose: bool,
 
     /// Don't render any output.
     #[structopt(short = "q", long = "quiet", overrides_with = "verbose")]
-    pub quiet: bool,
+    quiet: bool,
+
+    /// Show color in command output. "auto" will enable color if output is sent to a TTY.
+    #[structopt(
+        long = "color", default_value = "auto", raw(possible_values = "&ColorMode::variants()")
+    )]
+    color_mode: ColorMode,
 
     /// List all supported signals and exit.
     #[structopt(long = "list-signals")]
@@ -96,14 +109,20 @@ pub struct CliOptions {
 
 #[derive(Debug)]
 pub struct Options {
-    pub match_mode: MatchMode,
-    pub wait_time: Option<Duration>,
-    pub kill: bool,
-    pub terminate_signal: Signal,
-    pub kill_signal: Signal,
-    pub user: Option<uid_t>,
     pub dry_run: bool,
+    pub kill: bool,
+    pub kill_signal: Signal,
+    pub match_mode: MatchMode,
     pub output_mode: OutputMode,
+    pub terminate_signal: Signal,
+    pub colors: Colors,
+    pub user: Option<uid_t>,
+    pub wait_time: Option<Duration>,
+}
+
+#[derive(Debug)]
+pub struct Colors {
+    enabled: bool,
 }
 
 impl From<CliOptions> for Options {
@@ -149,14 +168,21 @@ impl From<CliOptions> for Options {
             (false, true, true) => unreachable!("Should not happen due to overrides_with option"),
         };
 
+        let use_color = match cli_options.color_mode {
+            ColorMode::Never => false,
+            ColorMode::Always => true,
+            ColorMode::Auto => termion::is_tty(&::std::io::stdout()),
+        };
+
         Options {
-            match_mode,
             dry_run: cli_options.dry_run,
             kill: !cli_options.no_kill,
             kill_signal: cli_options.kill_signal,
-            terminate_signal: cli_options.terminate_signal,
-            user,
+            match_mode,
             output_mode,
+            terminate_signal: cli_options.terminate_signal,
+            colors: Colors { enabled: use_color },
+            user,
             wait_time,
         }
     }
@@ -174,6 +200,71 @@ impl OutputMode {
         match self {
             OutputMode::Verbose => true,
             OutputMode::Normal | OutputMode::Quiet => false,
+        }
+    }
+}
+
+impl ColorMode {
+    fn variants() -> [&'static str; 3] {
+        ["auto", "always", "never"]
+    }
+}
+
+impl ::std::str::FromStr for ColorMode {
+    type Err = &'static str;
+
+    fn from_str(string: &str) -> Result<ColorMode, Self::Err> {
+        match string {
+            "auto" => Ok(ColorMode::Auto),
+            "always" => Ok(ColorMode::Always),
+            "never" => Ok(ColorMode::Never),
+            _ => Err("Not a valid color mode"),
+        }
+    }
+}
+
+impl Colors {
+    pub fn reset(&self) -> String {
+        if self.enabled {
+            format!(
+                "{}{}",
+                termion::color::Fg(termion::color::Reset),
+                termion::style::Reset,
+            )
+        } else {
+            String::new()
+        }
+    }
+
+    pub fn red(&self) -> String {
+        if self.enabled {
+            termion::color::Fg(termion::color::Red).to_string()
+        } else {
+            String::new()
+        }
+    }
+
+    pub fn yellow(&self) -> String {
+        if self.enabled {
+            termion::color::Fg(termion::color::Yellow).to_string()
+        } else {
+            String::new()
+        }
+    }
+
+    pub fn green(&self) -> String {
+        if self.enabled {
+            termion::color::Fg(termion::color::Green).to_string()
+        } else {
+            String::new()
+        }
+    }
+
+    pub fn faded(&self) -> String {
+        if self.enabled {
+            termion::style::Faint.to_string()
+        } else {
+            String::new()
         }
     }
 }

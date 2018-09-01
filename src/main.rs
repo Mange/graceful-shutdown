@@ -19,7 +19,7 @@ use structopt::StructOpt;
 
 use processes::Process;
 
-use options::{CliOptions, Options, OutputMode};
+use options::{CliOptions, Options};
 
 fn list_signals() {
     // Print user-centric text if stdout is to a terminal. If piping stdout to some other process,
@@ -61,38 +61,46 @@ fn main() {
     }
 
     let options = Options::from(cli_options);
-    let output_mode = options.output_mode;
-    match run(options) {
+    match run(&options) {
         Ok(success) => if success {
             exit(0)
         } else {
             exit(1)
         },
         Err(err) => {
-            if output_mode.show_normal() {
-                eprintln!("ERROR: {}", err);
+            if options.output_mode.show_normal() {
+                eprintln!(
+                    "{red}ERROR: {message}{reset}",
+                    message = err,
+                    red = options.colors.red(),
+                    reset = options.colors.reset()
+                );
             }
             exit(1);
         }
     }
 }
 
-fn run(options: Options) -> Result<bool, String> {
-    let matcher = Matcher::new(load_patterns(options.output_mode)?, options.match_mode);
+fn run(options: &Options) -> Result<bool, String> {
+    let matcher = Matcher::new(load_patterns(options)?, options.match_mode);
 
-    let processes = all_processes(&options, &matcher)?;
+    let processes = all_processes(options, &matcher)?;
 
     // Time to shut them down
     if options.dry_run {
-        dry_run(&options, &processes)
+        dry_run(options, &processes)
     } else {
-        real_run(&options, processes)
+        real_run(options, processes)
     }
 }
 
-fn load_patterns(output_mode: OutputMode) -> Result<RegexSet, String> {
-    if output_mode.show_normal() && termion::is_tty(&::std::io::stdin()) {
-        eprintln!("WARNING: Reading processlist from TTY stdin. Exit with ^D when you are done, or ^C to abort.");
+fn load_patterns(options: &Options) -> Result<RegexSet, String> {
+    if options.output_mode.show_normal() && termion::is_tty(&::std::io::stdin()) {
+        eprintln!(
+            "{yellow}WARNING: Reading processlist from TTY stdin. Exit with ^D when you are done, or ^C to abort.{reset}",
+            yellow = options.colors.yellow(),
+            reset = options.colors.reset(),
+        );
     }
 
     let stdin = io::stdin();
@@ -181,7 +189,11 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
         // Time is up. Kill remaining processes.
         if options.kill {
             if options.output_mode.show_verbose() {
-                eprintln!("Timeout reached. Forcefully shutting down processes.");
+                eprintln!(
+                    "{red}Timeout reached. Forcefully shutting down processes.{reset}",
+                    red = options.colors.red(),
+                    reset = options.colors.reset()
+                );
             }
             for process in &processes {
                 verbose_signal_message(options.kill_signal, options, process);
@@ -189,7 +201,11 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
             }
         } else {
             if options.output_mode.show_normal() {
-                eprintln!("WARNING: Some processes are still alive.");
+                eprintln!(
+                    "{yellow}WARNING: Some processes are still alive.{reset}",
+                    yellow = options.colors.yellow(),
+                    reset = options.colors.reset()
+                );
             }
             if options.output_mode.show_verbose() {
                 for process in &processes {
@@ -220,14 +236,21 @@ fn human_process_description(options: &Options, process: &Process) -> String {
     use matcher::MatchMode;
 
     match options.match_mode {
-        MatchMode::Basename => {
-            format!("{pid} ({name})", pid = process.pid(), name = process.name())
-        }
-        MatchMode::Commandline => format!(
-            "{pid} ({name}): {cmdline}",
+        MatchMode::Basename => format!(
+            "{green}{pid}{reset} ({green}{name}{reset})",
             pid = process.pid(),
             name = process.name(),
-            cmdline = process.commandline()
+            green = options.colors.green(),
+            reset = options.colors.reset()
+        ),
+        MatchMode::Commandline => format!(
+            "{green}{pid}{reset} ({green}{name}{reset}): {faded}{cmdline}{reset}",
+            pid = process.pid(),
+            name = process.name(),
+            cmdline = process.commandline(),
+            green = options.colors.green(),
+            faded = options.colors.faded(),
+            reset = options.colors.reset(),
         ),
     }
 }
