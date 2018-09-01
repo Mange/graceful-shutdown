@@ -189,14 +189,14 @@ impl From<CliOptions> for Options {
 }
 
 impl OutputMode {
-    pub fn show_normal(&self) -> bool {
+    pub fn show_normal(self) -> bool {
         match self {
             OutputMode::Verbose | OutputMode::Normal => true,
             OutputMode::Quiet => false,
         }
     }
 
-    pub fn show_verbose(&self) -> bool {
+    pub fn show_verbose(self) -> bool {
         match self {
             OutputMode::Verbose => true,
             OutputMode::Normal | OutputMode::Quiet => false,

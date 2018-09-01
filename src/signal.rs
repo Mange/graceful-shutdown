@@ -1,6 +1,6 @@
 extern crate libc;
-use std::str::FromStr;
 use std::fmt;
+use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Signal {
@@ -38,8 +38,8 @@ impl Signal {
         SignalIterator { next: 0 }
     }
 
-    pub fn basename(&self) -> &'static str {
-        match *self {
+    pub fn basename(self) -> &'static str {
+        match self {
             Signal::SIGABRT => "SIGABRT",
             Signal::SIGALRM => "SIGALRM",
             Signal::SIGHUP => "SIGHUP",
@@ -53,8 +53,8 @@ impl Signal {
         }
     }
 
-    pub fn name(&self) -> &'static str {
-        match *self {
+    pub fn name(self) -> &'static str {
+        match self {
             Signal::SIGABRT => "ABRT",
             Signal::SIGALRM => "ALRM",
             Signal::SIGHUP => "HUP",
@@ -68,8 +68,8 @@ impl Signal {
         }
     }
 
-    pub fn number(&self) -> i32 {
-        match *self {
+    pub fn number(self) -> i32 {
+        match self {
             Signal::SIGABRT => libc::SIGABRT,
             Signal::SIGALRM => libc::SIGALRM,
             Signal::SIGHUP => libc::SIGHUP,
@@ -96,7 +96,7 @@ impl Iterator for SignalIterator {
     fn next(&mut self) -> Option<Signal> {
         let res = SIGNALS.get(self.next).cloned();
         self.next += 1;
-        return res;
+        res
     }
 }
 
@@ -120,7 +120,6 @@ impl FromStr for Signal {
         for signal in Signal::variants() {
             if signal.basename() == upper_sig || signal.name() == upper_sig
                 || signal_number
-                    .clone()
                     .map(|num| signal.number() == num)
                     .unwrap_or(false)
             {

@@ -131,7 +131,7 @@ fn all_processes(options: &Options, matcher: &Matcher) -> Result<Vec<Process>, S
 }
 
 fn strip_comment(line: String) -> String {
-    match line.find("#") {
+    match line.find('#') {
         Some(index) => line[0..index].trim().to_string(),
         None => line,
     }

@@ -56,7 +56,7 @@ impl Iterator for ProcessIterator {
         match self.read_dir.next() {
             Some(Ok(entry)) => {
                 if is_dir(&entry) && has_numeric_name(&entry) {
-                    Some(Process::from_entry(entry))
+                    Some(Process::from_entry(&entry))
                 } else {
                     self.next()
                 }
@@ -92,13 +92,13 @@ impl Process {
     pub fn all_from_user(user: uid_t) -> Result<ProcIter, String> {
         ProcessIterator::new().map(|iter| {
             Box::new(UserFilter {
-                user: user,
+                user,
                 process_iter: iter,
             }) as ProcIter
         })
     }
 
-    fn from_entry(entry: DirEntry) -> Result<Process, String> {
+    fn from_entry(entry: &DirEntry) -> Result<Process, String> {
         let path = entry.path();
         let name = read_file(&path.join("comm"))?.trim_right().to_string();
         let cmdline = parse_cmdline(&read_file(&path.join("cmdline"))?);
