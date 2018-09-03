@@ -139,12 +139,33 @@ impl Process {
         proc_path.exists()
     }
 
-    pub fn send(&self, signal: Signal) {
+    pub fn send(&self, signal: Signal) -> Result<(), KillError> {
+        use nix::errno::Errno;
+        use nix::Error;
+
         match kill(self.pid, signal) {
-            Ok(()) => return,
-            Err(error) => panic!("Call to kill failed: {}", error),
+            Ok(()) => Ok(()),
+            Err(Error::Sys(Errno::EINVAL)) => Err(KillError::InvalidSignal),
+            Err(Error::Sys(Errno::EPERM)) => Err(KillError::NoPermission),
+            Err(Error::Sys(Errno::ESRCH)) => Err(KillError::DoesNotExist),
+
+            Err(Error::Sys(errno)) => Err(KillError::UnexpectedError(format!("errno {}", errno))),
+
+            Err(error) => Err(KillError::UnexpectedError(format!("{}", error))),
         }
     }
+}
+
+#[derive(Debug, Clone, Fail)]
+pub enum KillError {
+    #[fail(display = "Invalid signal")]
+    InvalidSignal,
+    #[fail(display = "Insufficient permission to send signal to this process")]
+    NoPermission,
+    #[fail(display = "Cannot find process")]
+    DoesNotExist,
+    #[fail(display = "Unexpected error: {}", _0)]
+    UnexpectedError(String),
 }
 
 fn read_file(path: &Path) -> Result<String, String> {

@@ -1,5 +1,8 @@
 #[macro_use]
 extern crate structopt;
+#[macro_use]
+extern crate failure;
+
 extern crate nix;
 extern crate regex;
 extern crate termion;
@@ -11,14 +14,13 @@ mod processes;
 mod signal;
 
 use matcher::Matcher;
+use processes::{KillError, Process};
 use regex::{RegexSet, RegexSetBuilder};
 use signal::Signal;
 use std::io;
 use std::io::BufRead;
 use std::time::{Duration, Instant};
 use structopt::StructOpt;
-
-use processes::Process;
 
 use options::{CliOptions, Options};
 
@@ -156,10 +158,24 @@ fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, String> {
 }
 
 fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, String> {
-    for process in &processes {
+    let mut success = true;
+
+    // Try to terminate all the processes. If any process failed to receive the signal, then remove
+    // it from the list so the coming waiting part does not wait for any process that will not be
+    // terminated anyway.
+    //
+    // As an example, if a process has a "Permission denied" error, it will fail to get the
+    // terminate signal. Why would we be waiting on this process and then try to kill it when that
+    // too will fail?
+    processes.retain(|process| {
         verbose_signal_message(options.terminate_signal, options, process);
-        process.send(options.terminate_signal);
-    }
+        if send_with_error_handling(options.terminate_signal, options, process) {
+            true
+        } else {
+            success = false;
+            false
+        }
+    });
 
     // Wait for processess to die
     if let Some(wait_time) = options.wait_time {
@@ -183,7 +199,7 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
             });
 
             if processes.is_empty() {
-                return Ok(true);
+                return Ok(success);
             }
         }
 
@@ -198,7 +214,9 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
             }
             for process in &processes {
                 verbose_signal_message(options.kill_signal, options, process);
-                process.send(options.kill_signal);
+                if !send_with_error_handling(options.kill_signal, options, process) {
+                    success = false;
+                }
             }
         } else {
             if options.output_mode.show_normal() {
@@ -216,11 +234,11 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Stri
                     );
                 }
             }
-            return Ok(false);
+            success = false;
         }
     }
 
-    Ok(true)
+    Ok(success)
 }
 
 fn verbose_signal_message(signal: Signal, options: &Options, process: &Process) {
@@ -230,6 +248,27 @@ fn verbose_signal_message(signal: Signal, options: &Options, process: &Process) 
             signal = signal,
             process = human_process_description(options, process),
         );
+    }
+}
+
+#[must_use]
+fn send_with_error_handling(signal: Signal, options: &Options, process: &Process) -> bool {
+    match process.send(signal) {
+        Ok(_) => true,
+        // Process quit before we had time to signal it? That should be fine. The next steps will
+        // verify that it is gone instead.
+        Err(KillError::DoesNotExist) => true,
+        Err(error) => {
+            eprintln!(
+                "{red}Failed to send {signal} to{reset} {process}: {red}{error}{reset}",
+                signal = signal,
+                process = human_process_description(options, process),
+                error = error,
+                red = options.colors.red(),
+                reset = options.colors.reset(),
+            );
+            false
+        }
     }
 }
 
