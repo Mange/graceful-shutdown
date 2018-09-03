@@ -1,102 +1,75 @@
-extern crate libc;
+use nix::sys::signal::Signal as NixSignal;
 use std::fmt;
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Signal {
-    SIGABRT,
-    SIGALRM,
-    SIGHUP,
-    SIGINT,
-    SIGKILL,
-    SIGQUIT,
-    SIGSTOP,
-    SIGTERM,
-    SIGUSR1,
-    SIGUSR2,
-}
-
-const SIGNALS: [Signal; 10] = [
-    Signal::SIGABRT,
-    Signal::SIGALRM,
-    Signal::SIGHUP,
-    Signal::SIGINT,
-    Signal::SIGKILL,
-    Signal::SIGQUIT,
-    Signal::SIGSTOP,
-    Signal::SIGTERM,
-    Signal::SIGUSR1,
-    Signal::SIGUSR2,
-];
-
-pub struct SignalIterator {
-    next: usize,
-}
+pub struct Signal(NixSignal);
 
 impl Signal {
-    pub fn variants() -> SignalIterator {
-        SignalIterator { next: 0 }
+    pub fn iterator() -> impl Iterator<Item = Signal> {
+        NixSignal::iterator().map(Signal)
+    }
+
+    pub fn name(self) -> String {
+        format!("SIG{}", self.basename())
     }
 
     pub fn basename(self) -> &'static str {
-        match self {
-            Signal::SIGABRT => "SIGABRT",
-            Signal::SIGALRM => "SIGALRM",
-            Signal::SIGHUP => "SIGHUP",
-            Signal::SIGINT => "SIGINT",
-            Signal::SIGKILL => "SIGKILL",
-            Signal::SIGQUIT => "SIGQUIT",
-            Signal::SIGSTOP => "SIGSTOP",
-            Signal::SIGTERM => "SIGTERM",
-            Signal::SIGUSR1 => "SIGUSR1",
-            Signal::SIGUSR2 => "SIGUSR2",
-        }
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Signal::SIGABRT => "ABRT",
-            Signal::SIGALRM => "ALRM",
-            Signal::SIGHUP => "HUP",
-            Signal::SIGINT => "INT",
-            Signal::SIGKILL => "KILL",
-            Signal::SIGQUIT => "QUIT",
-            Signal::SIGSTOP => "STOP",
-            Signal::SIGTERM => "TERM",
-            Signal::SIGUSR1 => "USR1",
-            Signal::SIGUSR2 => "USR2",
+        match self.0 {
+            NixSignal::SIGABRT => "ABRT",
+            NixSignal::SIGALRM => "ALRM",
+            NixSignal::SIGHUP => "HUP",
+            NixSignal::SIGINT => "INT",
+            NixSignal::SIGKILL => "KILL",
+            NixSignal::SIGQUIT => "QUIT",
+            NixSignal::SIGSTOP => "STOP",
+            NixSignal::SIGTERM => "TERM",
+            NixSignal::SIGUSR1 => "USR1",
+            NixSignal::SIGUSR2 => "USR2",
+            NixSignal::SIGILL => "ILL",
+            NixSignal::SIGTRAP => "TRAP",
+            NixSignal::SIGBUS => "BUS",
+            NixSignal::SIGFPE => "FPE",
+            NixSignal::SIGSEGV => "SEGV",
+            NixSignal::SIGPIPE => "PIPE",
+            NixSignal::SIGSTKFLT => "STKFLT",
+            NixSignal::SIGCHLD => "CHLD",
+            NixSignal::SIGCONT => "CONT",
+            NixSignal::SIGTSTP => "TSTP",
+            NixSignal::SIGTTIN => "TTIN",
+            NixSignal::SIGTTOU => "TTOU",
+            NixSignal::SIGURG => "URG",
+            NixSignal::SIGXCPU => "XCPU",
+            NixSignal::SIGXFSZ => "XFSZ",
+            NixSignal::SIGVTALRM => "VTALRM",
+            NixSignal::SIGPROF => "PROF",
+            NixSignal::SIGWINCH => "WINCH",
+            NixSignal::SIGIO => "IO",
+            NixSignal::SIGPWR => "PWR",
+            NixSignal::SIGSYS => "SYS",
         }
     }
 
     pub fn number(self) -> i32 {
-        match self {
-            Signal::SIGABRT => libc::SIGABRT,
-            Signal::SIGALRM => libc::SIGALRM,
-            Signal::SIGHUP => libc::SIGHUP,
-            Signal::SIGINT => libc::SIGINT,
-            Signal::SIGKILL => libc::SIGKILL,
-            Signal::SIGQUIT => libc::SIGQUIT,
-            Signal::SIGSTOP => libc::SIGSTOP,
-            Signal::SIGTERM => libc::SIGTERM,
-            Signal::SIGUSR1 => libc::SIGUSR1,
-            Signal::SIGUSR2 => libc::SIGUSR2,
-        }
+        self.0 as i32
     }
 }
 
 impl fmt::Display for Signal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.name().fmt(f)
+        self.basename().fmt(f)
     }
 }
 
-impl Iterator for SignalIterator {
-    type Item = Signal;
+impl From<Signal> for NixSignal {
+    fn from(signal: Signal) -> NixSignal {
+        signal.0
+    }
+}
 
-    fn next(&mut self) -> Option<Signal> {
-        let res = SIGNALS.get(self.next).cloned();
-        self.next += 1;
-        res
+impl From<Signal> for Option<NixSignal> {
+    fn from(signal: Signal) -> Option<NixSignal> {
+        Some(signal.0)
     }
 }
 
@@ -117,7 +90,7 @@ impl FromStr for Signal {
 
         let signal_number: Option<i32> = sig.parse().ok();
 
-        for signal in Signal::variants() {
+        for signal in Signal::iterator() {
             if signal.basename() == upper_sig || signal.name() == upper_sig
                 || signal_number
                     .map(|num| signal.number() == num)
@@ -138,20 +111,20 @@ mod tests {
     #[test]
     fn it_parses_strings_with_basename() {
         let sig: Signal = "kiLL".parse().expect("Failed to parse");
-        assert_eq!(sig, Signal::SIGKILL);
+        assert_eq!(sig, Signal(NixSignal::SIGKILL));
     }
 
     #[test]
     fn it_parses_strings_with_name() {
         let sig: Signal = "SiGkiLL".parse().expect("Failed to parse");
-        assert_eq!(sig, Signal::SIGKILL);
+        assert_eq!(sig, Signal(NixSignal::SIGKILL));
     }
 
     #[test]
     fn it_parses_strings_with_signal_number() {
-        let string = Signal::SIGKILL.number().to_string();
+        let string = Signal(NixSignal::SIGKILL).number().to_string();
         let sig: Signal = string.parse().expect("Failed to parse");
-        assert_eq!(sig, Signal::SIGKILL);
+        assert_eq!(sig, Signal(NixSignal::SIGKILL));
     }
 
     #[test]
@@ -168,5 +141,14 @@ mod tests {
             "31337".parse::<Signal>(),
             Err(ParseError::UnknownSignalName)
         );
+    }
+
+    #[test]
+    fn it_roundtrips_all_signals_parsing() {
+        for signal in Signal::iterator() {
+            assert_eq!(signal.basename().parse(), Ok(signal));
+            assert_eq!(signal.name().parse(), Ok(signal));
+            assert_eq!(signal.number().to_string().parse(), Ok(signal));
+        }
     }
 }

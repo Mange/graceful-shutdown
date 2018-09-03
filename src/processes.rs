@@ -1,18 +1,18 @@
-extern crate libc;
 extern crate users;
 use users::uid_t;
 
+use nix::sys::signal::kill;
+use nix::unistd::Pid;
+use signal::Signal;
 use std::fs::{read_dir, DirEntry, File, ReadDir};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-
-use signal::Signal;
 
 pub type ProcIter = Box<Iterator<Item = Result<Process, String>>>;
 
 #[derive(Debug)]
 pub struct Process {
-    pid: i32,
+    pid: Pid,
     user_id: uid_t,
     name: String,
     cmdline: String,
@@ -113,7 +113,7 @@ impl Process {
         Ok(Process {
             name,
             cmdline,
-            pid,
+            pid: Pid::from_raw(pid),
             user_id: uid_of_file(&path)?,
         })
     }
@@ -126,7 +126,7 @@ impl Process {
         &self.cmdline
     }
 
-    pub fn pid(&self) -> i32 {
+    pub fn pid(&self) -> Pid {
         self.pid
     }
 
@@ -140,10 +140,9 @@ impl Process {
     }
 
     pub fn send(&self, signal: Signal) {
-        unsafe {
-            if libc::kill(self.pid, signal.number()) < 0 {
-                panic!("Call to kill failed.");
-            }
+        match kill(self.pid, signal) {
+            Ok(()) => return,
+            Err(error) => panic!("Call to kill failed: {}", error),
         }
     }
 }

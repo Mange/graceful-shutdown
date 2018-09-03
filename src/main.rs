@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate structopt;
+extern crate nix;
 extern crate regex;
 extern crate termion;
 extern crate users;
@@ -30,8 +31,8 @@ fn list_signals() {
         println!("Currently supported signals:")
     };
 
-    for signal in Signal::variants() {
-        println!("{}\t{}", signal.number(), signal.name());
+    for signal in Signal::iterator() {
+        println!("{}\t{}", signal.number(), signal);
     }
 
     if is_tty {
