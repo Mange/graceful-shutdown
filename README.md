@@ -75,12 +75,27 @@ echo "/electron .*yakyak/app$" | graceful-shutdown --whole-command --mine
 echo "/spotify( --force-device|$)" | graceful-shutdown --whole-command --mine
 ```
 
-## Platform support
+## Installation
+
+<a href="https://repology.org/metapackage/graceful-shutdown/versions">
+    <img src="https://repology.org/badge/vertical-allrepos/graceful-shutdown.svg" alt="Packaging status" align="right">
+</a>
+
+This package is available through Arch Linux's AUR repository as
+`graceful-shutdown`. You may also compile it from source by downloading the
+source code and install it using `cargo` (Rust's build system and package
+manager):
+
+```bash
+cargo install
+```
+
+### Platform support
 
 Currently this software is only supported on Linux. It is possible to add more
 platforms if someone would care to add support for them; PRs are welcome.
 
-## Completions
+### Completions
 
 This command comes with support for shell autocompletions for **bash**,
 **zsh**, and **fish**.
@@ -104,6 +119,9 @@ sudo install -Dm644 graceful-shutdown.fish \
 
 If you have a local source for completions, redirect the output of the
 `--generate-completions` command to the appropriate location.
+
+If you install through the AUR, then these completions are already installed
+for you automatically.
 
 ## Copyright
 
