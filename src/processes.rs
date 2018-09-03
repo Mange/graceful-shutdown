@@ -1,12 +1,13 @@
 extern crate users;
-use users::uid_t;
 
+use failure::Error;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use signal::Signal;
 use std::fs::{read_dir, DirEntry, File, ReadDir};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use users::uid_t;
 
 pub type ProcIter = Box<Iterator<Item = Result<Process, String>>>;
 
@@ -40,9 +41,10 @@ fn has_numeric_name(entry: &DirEntry) -> bool {
 }
 
 impl ProcessIterator {
-    fn new() -> Result<ProcessIterator, String> {
+    fn new() -> Result<ProcessIterator, Error> {
         Ok(ProcessIterator {
-            read_dir: read_dir("/proc").map_err(|err| format!("Failed to open /proc: {}", err))?,
+            read_dir: read_dir("/proc")
+                .map_err(|err| format_err!("Failed to open /proc: {}", err))?,
         })
     }
 }
@@ -85,11 +87,11 @@ impl Iterator for UserFilter {
 }
 
 impl Process {
-    pub fn all() -> Result<ProcIter, String> {
+    pub fn all() -> Result<ProcIter, Error> {
         ProcessIterator::new().map(|iter| Box::new(iter) as ProcIter)
     }
 
-    pub fn all_from_user(user: uid_t) -> Result<ProcIter, String> {
+    pub fn all_from_user(user: uid_t) -> Result<ProcIter, Error> {
         ProcessIterator::new().map(|iter| {
             Box::new(UserFilter {
                 user,

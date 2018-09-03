@@ -13,7 +13,9 @@ mod options;
 mod processes;
 mod signal;
 
+use failure::{Error, ResultExt};
 use matcher::Matcher;
+use options::{CliOptions, Options, UserMode};
 use processes::{KillError, Process};
 use regex::{RegexSet, RegexSetBuilder};
 use signal::Signal;
@@ -21,8 +23,7 @@ use std::io;
 use std::io::BufRead;
 use std::time::{Duration, Instant};
 use structopt::StructOpt;
-
-use options::{CliOptions, Options};
+use users::uid_t;
 
 fn list_signals() {
     // Print user-centric text if stdout is to a terminal. If piping stdout to some other process,
@@ -76,18 +77,31 @@ fn main() {
                     "{red}ERROR: {message}{reset}",
                     message = err,
                     red = options.colors.red(),
-                    reset = options.colors.reset()
+                    reset = options.colors.reset(),
                 );
+                for (level, cause) in err.iter_causes().enumerate() {
+                    eprintln!(
+                        "{red}{indent:width$}Caused by: {cause}{reset}",
+                        cause = cause,
+                        indent = "",
+                        width = (level + 1) * 2,
+                        red = options.colors.red(),
+                        reset = options.colors.reset(),
+                    );
+                }
             }
             exit(1);
         }
     }
 }
 
-fn run(options: &Options) -> Result<bool, String> {
-    let matcher = Matcher::new(load_patterns(options)?, options.match_mode);
+fn run(options: &Options) -> Result<bool, Error> {
+    let matcher = Matcher::new(
+        load_patterns(options).context("Could not load patterns")?,
+        options.match_mode,
+    );
 
-    let processes = all_processes(options, &matcher)?;
+    let processes = all_processes(options, &matcher).context("Could not build process list")?;
 
     // Time to shut them down
     if options.dry_run {
@@ -97,7 +111,7 @@ fn run(options: &Options) -> Result<bool, String> {
     }
 }
 
-fn load_patterns(options: &Options) -> Result<RegexSet, String> {
+fn load_patterns(options: &Options) -> Result<RegexSet, Error> {
     if options.output_mode.show_normal() && termion::is_tty(&::std::io::stdin()) {
         eprintln!(
             "{yellow}WARNING: Reading processlist from TTY stdin. Exit with ^D when you are done, or ^C to abort.{reset}",
@@ -118,19 +132,32 @@ fn load_patterns(options: &Options) -> Result<RegexSet, String> {
     RegexSetBuilder::new(&patterns)
         .case_insensitive(true)
         .build()
-        .map_err(|err| err.to_string())
+        .map_err(|err| err.into())
 }
 
-fn all_processes(options: &Options, matcher: &Matcher) -> Result<Vec<Process>, String> {
-    let iter = match options.user {
-        Some(ref uid) => Process::all_from_user(uid.to_owned())?,
-        None => Process::all()?,
+fn all_processes(options: &Options, matcher: &Matcher) -> Result<Vec<Process>, Error> {
+    let iter = match &options.user_mode {
+        UserMode::Everybody => Process::all()?,
+        UserMode::OnlyMe => Process::all_from_user(users::get_current_uid())?,
+        UserMode::Only(name) => Process::all_from_user(find_user_by_name(&name)?)?,
     };
 
     Ok(iter
         .flat_map(Result::ok)
         .filter(|process| matcher.is_match(process))
         .collect::<Vec<_>>())
+}
+
+#[derive(Debug, Fail)]
+pub enum UserError {
+    #[fail(display = "Could not find user with name \"{}\"", _0)]
+    NotFound(String),
+}
+
+fn find_user_by_name(name: &str) -> Result<uid_t, UserError> {
+    users::get_user_by_name(name)
+        .ok_or_else(|| UserError::NotFound(name.to_owned()))
+        .map(|user| user.uid())
 }
 
 fn strip_comment(line: String) -> String {
@@ -140,7 +167,7 @@ fn strip_comment(line: String) -> String {
     }
 }
 
-fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, String> {
+fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, Error> {
     // If we're not rendering anything, might as well skip the iteration completely.
     if !options.output_mode.show_normal() {
         return Ok(true);
@@ -157,7 +184,7 @@ fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, String> {
     Ok(true)
 }
 
-fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, String> {
+fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Error> {
     let mut success = true;
 
     // Try to terminate all the processes. If any process failed to receive the signal, then remove

@@ -6,7 +6,6 @@ use matcher::MatchMode;
 use signal::Signal;
 use std::time::Duration;
 use structopt::clap::Shell;
-use users::uid_t;
 
 #[derive(Debug, Clone, Copy)]
 pub enum OutputMode {
@@ -67,12 +66,12 @@ pub struct CliOptions {
     match_whole: bool,
 
     /// Only find processes owned by the user with the given name.
-    #[structopt(short = "u", long = "user", value_name = "USER")]
+    #[structopt(short = "u", long = "user", value_name = "USER", overrides_with = "mine")]
     user: Option<String>,
 
     /// Only find processes owned by you. Shortcut for --user "$USER". Has no effect if --user is
     /// specified.
-    #[structopt(short = "m", long = "mine")]
+    #[structopt(short = "m", long = "mine", overrides_with = "user")]
     mine: bool,
 
     /// Don't actually send any signals to processes, instead show what actions would take place.
@@ -116,8 +115,15 @@ pub struct Options {
     pub output_mode: OutputMode,
     pub terminate_signal: Signal,
     pub colors: Colors,
-    pub user: Option<uid_t>,
+    pub user_mode: UserMode,
     pub wait_time: Option<Duration>,
+}
+
+#[derive(Debug)]
+pub enum UserMode {
+    Everybody,
+    OnlyMe,
+    Only(String),
 }
 
 #[derive(Debug)]
@@ -133,21 +139,12 @@ impl From<CliOptions> for Options {
             None
         };
 
-        let mine = cli_options.mine;
-        let user = cli_options
-            .user
-            .map(|name| {
-                users::get_user_by_name(&name)
-                    .expect("Could not find user")
-                    .uid()
-            })
-            .or_else(|| {
-                if mine {
-                    Some(users::get_current_uid())
-                } else {
-                    None
-                }
-            });
+        let user_mode = match (cli_options.user, cli_options.mine) {
+            (Some(name), false) => UserMode::Only(name),
+            (None, true) => UserMode::OnlyMe,
+            (None, false) => UserMode::Everybody,
+            (Some(_), true) => unreachable!("Should not happen because of overrides_with"),
+        };
 
         let match_mode = if cli_options.match_whole {
             MatchMode::Commandline
@@ -182,7 +179,7 @@ impl From<CliOptions> for Options {
             output_mode,
             terminate_signal: cli_options.terminate_signal,
             colors: Colors { enabled: use_color },
-            user,
+            user_mode,
             wait_time,
         }
     }
