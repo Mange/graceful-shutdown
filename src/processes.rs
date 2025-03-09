@@ -147,17 +147,14 @@ impl Process {
 
     pub fn send(&self, signal: Signal) -> Result<(), KillError> {
         use nix::errno::Errno;
-        use nix::Error;
 
         match kill(self.pid, signal) {
             Ok(()) => Ok(()),
-            Err(Error::Sys(Errno::EINVAL)) => Err(KillError::InvalidSignal),
-            Err(Error::Sys(Errno::EPERM)) => Err(KillError::NoPermission),
-            Err(Error::Sys(Errno::ESRCH)) => Err(KillError::DoesNotExist),
+            Err(Errno::EINVAL) => Err(KillError::InvalidSignal),
+            Err(Errno::EPERM) => Err(KillError::NoPermission),
+            Err(Errno::ESRCH) => Err(KillError::DoesNotExist),
 
-            Err(Error::Sys(errno)) => Err(KillError::UnexpectedError(format!("errno {}", errno))),
-
-            Err(error) => Err(KillError::UnexpectedError(format!("{}", error))),
+            Err(errno) => Err(KillError::UnexpectedError(format!("errno {}", errno))),
         }
     }
 }

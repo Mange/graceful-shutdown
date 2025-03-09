@@ -10,47 +10,15 @@ impl Signal {
         NixSignal::iterator().map(Signal)
     }
 
-    pub fn name(self) -> String {
-        format!("SIG{}", self.basename())
+    pub fn name(&self) -> String {
+        self.0.to_string()
     }
 
-    pub fn basename(self) -> &'static str {
-        match self.0 {
-            NixSignal::SIGABRT => "ABRT",
-            NixSignal::SIGALRM => "ALRM",
-            NixSignal::SIGHUP => "HUP",
-            NixSignal::SIGINT => "INT",
-            NixSignal::SIGKILL => "KILL",
-            NixSignal::SIGQUIT => "QUIT",
-            NixSignal::SIGSTOP => "STOP",
-            NixSignal::SIGTERM => "TERM",
-            NixSignal::SIGUSR1 => "USR1",
-            NixSignal::SIGUSR2 => "USR2",
-            NixSignal::SIGILL => "ILL",
-            NixSignal::SIGTRAP => "TRAP",
-            NixSignal::SIGBUS => "BUS",
-            NixSignal::SIGFPE => "FPE",
-            NixSignal::SIGSEGV => "SEGV",
-            NixSignal::SIGPIPE => "PIPE",
-            NixSignal::SIGSTKFLT => "STKFLT",
-            NixSignal::SIGCHLD => "CHLD",
-            NixSignal::SIGCONT => "CONT",
-            NixSignal::SIGTSTP => "TSTP",
-            NixSignal::SIGTTIN => "TTIN",
-            NixSignal::SIGTTOU => "TTOU",
-            NixSignal::SIGURG => "URG",
-            NixSignal::SIGXCPU => "XCPU",
-            NixSignal::SIGXFSZ => "XFSZ",
-            NixSignal::SIGVTALRM => "VTALRM",
-            NixSignal::SIGPROF => "PROF",
-            NixSignal::SIGWINCH => "WINCH",
-            NixSignal::SIGIO => "IO",
-            NixSignal::SIGPWR => "PWR",
-            NixSignal::SIGSYS => "SYS",
-        }
+    pub fn basename(&self) -> String {
+        self.name().trim_start_matches("SIG").to_uppercase()
     }
 
-    pub fn number(self) -> i32 {
+    pub fn number(&self) -> i32 {
         self.0 as i32
     }
 }
@@ -91,7 +59,8 @@ impl FromStr for Signal {
         let signal_number: Option<i32> = sig.parse().ok();
 
         for signal in Signal::iterator() {
-            if signal.basename() == upper_sig || signal.name() == upper_sig
+            if signal.basename() == upper_sig
+                || signal.name() == upper_sig
                 || signal_number
                     .map(|num| signal.number() == num)
                     .unwrap_or(false)
