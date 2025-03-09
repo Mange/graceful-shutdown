@@ -4,7 +4,7 @@ use failure::Error;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use signal::Signal;
-use std::fs::{read_dir, DirEntry, File, ReadDir};
+use std::fs::{self, read_dir, DirEntry, File, ReadDir};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use users::uid_t;
@@ -102,8 +102,6 @@ impl Process {
 
     fn from_entry(entry: &DirEntry) -> Result<Process, String> {
         let path = entry.path();
-        let name = read_file(&path.join("comm"))?.trim_end().to_string();
-        let cmdline = parse_cmdline(&read_file(&path.join("cmdline"))?);
         let pid = {
             let basename = entry.file_name();
             let basename = basename.to_string_lossy();
@@ -112,8 +110,14 @@ impl Process {
                 .map_err(|e| format!("Failed to parse PID in {}: {}", basename, e))?
         };
 
+        let exe = fs::read_link(path.join("exe"))
+            .map_err(|e| format!("Failed to determine executable of PID {pid}: {e}"))?;
+
+        let name = exe.file_name().unwrap_or(exe.as_os_str()).to_string_lossy();
+        let cmdline = parse_cmdline(&read_file(&path.join("cmdline"))?);
+
         Ok(Process {
-            name,
+            name: name.into_owned(),
             cmdline,
             pid: Pid::from_raw(pid),
             user_id: uid_of_file(&path)?,
