@@ -9,7 +9,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use users::uid_t;
 
-pub type ProcIter = Box<Iterator<Item = Result<Process, String>>>;
+pub type ProcIter = Box<dyn Iterator<Item = Result<Process, String>>>;
 
 #[derive(Debug)]
 pub struct Process {
@@ -37,7 +37,7 @@ fn has_numeric_name(entry: &DirEntry) -> bool {
         .file_name()
         .to_string_lossy()
         .bytes()
-        .all(|b| b >= b'0' && b <= b'9')
+        .all(|b| b.is_ascii_digit())
 }
 
 impl ProcessIterator {
@@ -102,7 +102,7 @@ impl Process {
 
     fn from_entry(entry: &DirEntry) -> Result<Process, String> {
         let path = entry.path();
-        let name = read_file(&path.join("comm"))?.trim_right().to_string();
+        let name = read_file(&path.join("comm"))?.trim_end().to_string();
         let cmdline = parse_cmdline(&read_file(&path.join("cmdline"))?);
         let pid = {
             let basename = entry.file_name();
@@ -188,7 +188,7 @@ fn uid_of_file(path: &Path) -> Result<uid_t, String> {
 }
 
 fn parse_cmdline(cmdline: &str) -> String {
-    cmdline.replace("\0", " ").trim_right().to_owned()
+    cmdline.replace("\0", " ").trim_end().to_owned()
 }
 
 #[cfg(test)]

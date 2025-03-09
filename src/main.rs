@@ -66,11 +66,8 @@ fn main() {
 
     let options = Options::from(cli_options);
     match run(&options) {
-        Ok(success) => if success {
-            exit(0)
-        } else {
-            exit(1)
-        },
+        Ok(true) => exit(0),
+        Ok(false) => exit(1),
         Err(err) => {
             if options.output_mode.show_normal() {
                 eprintln!(
@@ -124,7 +121,7 @@ fn load_patterns(options: &Options) -> Result<RegexSet, Error> {
     let patterns: Vec<String> = stdin
         .lock()
         .lines()
-        .flat_map(Result::ok)
+        .map_while(Result::ok)
         .map(strip_comment)
         .filter(|s| !s.is_empty())
         .collect();
@@ -139,7 +136,7 @@ fn all_processes(options: &Options, matcher: &Matcher) -> Result<Vec<Process>, E
     let iter = match &options.user_mode {
         UserMode::Everybody => Process::all()?,
         UserMode::OnlyMe => Process::all_from_user(users::get_current_uid())?,
-        UserMode::Only(name) => Process::all_from_user(find_user_by_name(&name)?)?,
+        UserMode::Only(name) => Process::all_from_user(find_user_by_name(name)?)?,
     };
 
     Ok(iter
