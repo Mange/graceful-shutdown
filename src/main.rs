@@ -1,8 +1,8 @@
 #[macro_use]
-extern crate structopt;
-#[macro_use]
 extern crate failure;
 
+extern crate clap;
+extern crate clap_complete;
 extern crate nix;
 extern crate regex;
 extern crate termion;
@@ -13,6 +13,8 @@ mod options;
 mod processes;
 mod signal;
 
+use clap::{CommandFactory, Parser};
+use clap_complete::Shell;
 use failure::{Error, ResultExt};
 use matcher::Matcher;
 use options::{CliOptions, Options, UserMode};
@@ -22,7 +24,6 @@ use signal::Signal;
 use std::io;
 use std::io::BufRead;
 use std::time::{Duration, Instant};
-use structopt::StructOpt;
 use users::uid_t;
 
 fn list_signals() {
@@ -43,16 +44,16 @@ fn list_signals() {
     };
 }
 
-fn generate_completions(shell: structopt::clap::Shell) {
-    let mut app = CliOptions::clap();
+fn generate_completions(shell: Shell) {
+    let mut app = CliOptions::command();
     let name = app.get_name().to_string();
 
-    app.gen_completions_to(name, shell, &mut io::stdout());
+    clap_complete::aot::generate(shell, &mut app, name, &mut io::stdout());
 }
 
 fn main() {
     use std::process::exit;
-    let cli_options = CliOptions::from_args();
+    let cli_options = CliOptions::parse();
 
     if cli_options.list_signals {
         list_signals();

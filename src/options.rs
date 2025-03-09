@@ -1,11 +1,11 @@
-extern crate structopt;
 extern crate termion;
 extern crate users;
 
+use clap::Parser;
+use clap_complete::Shell;
 use matcher::MatchMode;
 use signal::Signal;
-use std::time::Duration;
-use structopt::clap::Shell;
+use std::{borrow::Cow, time::Duration};
 
 #[derive(Debug, Clone, Copy)]
 pub enum OutputMode {
@@ -14,38 +14,42 @@ pub enum OutputMode {
     Quiet,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
 enum ColorMode {
     Auto,
     Always,
     Never,
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
+#[derive(Parser, Debug)]
 /// Reads a list of commands to gracefully terminate from STDIN.
 pub struct CliOptions {
     /// Number of seconds to wait for processes to terminate. Use 0 to disable waiting and exit
     /// immediately with a success status code.
-    #[structopt(short = "w", long = "wait-time", default_value = "5.0", value_name = "SECONDS")]
+    #[arg(
+        short = 'w',
+        long = "wait-time",
+        default_value = "5.0",
+        value_name = "SECONDS"
+    )]
     wait_time: f64,
 
     /// Do not try to kill processes that do not exit within the waiting time, if a waiting time is
     /// set. Exits with an error status code if any matched process was still alive when waiting
     /// time is up.
-    #[structopt(long = "no-kill")]
+    #[arg(long = "no-kill")]
     no_kill: bool,
 
     /// Signal to use when terminating processes.
     ///
     /// Signals can be specified using signal number or symbolic name (case insensitive, with or
     /// without the SIG prefix).
-    #[structopt(
-        short = "s",
+    #[arg(
+        short = 's',
         long = "terminate-signal",
         default_value = "term",
         value_name = "SIGNAL",
-        parse(try_from_str = "parse_signal")
+        value_parser = parse_signal
     )]
     terminate_signal: Signal,
 
@@ -53,56 +57,55 @@ pub struct CliOptions {
     ///
     /// Signals can be specified using signal number or symbolic name (case insensitive, with or
     /// without the SIG prefix).
-    #[structopt(
+    #[arg(
         long = "kill-signal",
         default_value = "kill",
         value_name = "SIGNAL",
-        parse(try_from_str = "parse_signal")
+        value_parser = parse_signal
     )]
     kill_signal: Signal,
 
     /// Match the whole commandline for the process rather than the basename.
-    #[structopt(short = "W", long = "whole-command", visible_alias = "whole")]
+    #[arg(short = 'W', long = "whole-command", visible_alias = "whole")]
     match_whole: bool,
 
     /// Only find processes owned by the user with the given name.
-    #[structopt(short = "u", long = "user", value_name = "USER", overrides_with = "mine")]
+    #[arg(
+        short = 'u',
+        long = "user",
+        value_name = "USER",
+        overrides_with = "mine"
+    )]
     user: Option<String>,
 
     /// Only find processes owned by you. Shortcut for --user "$USER". Has no effect if --user is
     /// specified.
-    #[structopt(short = "m", long = "mine", overrides_with = "user")]
+    #[arg(short = 'm', long = "mine", overrides_with = "user")]
     mine: bool,
 
     /// Don't actually send any signals to processes, instead show what actions would take place.
     /// Useful when testing configuration. This implies --verbose.
-    #[structopt(short = "n", long = "dry-run")]
+    #[arg(short = 'n', long = "dry-run")]
     dry_run: bool,
 
     /// Show more verbose output.
-    #[structopt(short = "v", long = "verbose", overrides_with = "quiet")]
+    #[arg(short = 'v', long = "verbose", overrides_with = "quiet")]
     verbose: bool,
 
     /// Don't render any output.
-    #[structopt(short = "q", long = "quiet", overrides_with = "verbose")]
+    #[arg(short = 'q', long = "quiet", overrides_with = "verbose")]
     quiet: bool,
 
     /// Show color in command output. "auto" will enable color if output is sent to a TTY.
-    #[structopt(
-        long = "color", default_value = "auto", raw(possible_values = "&ColorMode::variants()")
-    )]
+    #[arg(long = "color", default_value = "auto")]
     color_mode: ColorMode,
 
     /// List all supported signals and exit.
-    #[structopt(long = "list-signals")]
+    #[arg(long = "list-signals")]
     pub list_signals: bool,
 
     /// Generate completion script for a given shell and output on STDOUT.
-    #[structopt(
-        long = "generate-completions",
-        value_name = "SHELL",
-        raw(possible_values = "&Shell::variants()")
-    )]
+    #[arg(long = "generate-completions", value_name = "SHELL")]
     pub generate_completions: Option<Shell>,
 }
 
@@ -201,67 +204,48 @@ impl OutputMode {
     }
 }
 
-impl ColorMode {
-    fn variants() -> [&'static str; 3] {
-        ["auto", "always", "never"]
-    }
-}
-
-impl ::std::str::FromStr for ColorMode {
-    type Err = &'static str;
-
-    fn from_str(string: &str) -> Result<ColorMode, Self::Err> {
-        match string {
-            "auto" => Ok(ColorMode::Auto),
-            "always" => Ok(ColorMode::Always),
-            "never" => Ok(ColorMode::Never),
-            _ => Err("Not a valid color mode"),
-        }
-    }
-}
-
 impl Colors {
-    pub fn reset(&self) -> String {
+    pub fn reset(&self) -> Cow<str> {
         if self.enabled {
-            format!(
+            Cow::Owned(format!(
                 "{}{}",
                 termion::color::Fg(termion::color::Reset),
                 termion::style::Reset,
-            )
+            ))
         } else {
-            String::new()
+            Cow::Borrowed("")
         }
     }
 
-    pub fn red(&self) -> String {
+    pub fn red(&self) -> Cow<str> {
         if self.enabled {
-            termion::color::Fg(termion::color::Red).to_string()
+            Cow::Owned(termion::color::Fg(termion::color::Red).to_string())
         } else {
-            String::new()
+            Cow::Borrowed("")
         }
     }
 
-    pub fn yellow(&self) -> String {
+    pub fn yellow(&self) -> Cow<str> {
         if self.enabled {
-            termion::color::Fg(termion::color::Yellow).to_string()
+            Cow::Owned(termion::color::Fg(termion::color::Yellow).to_string())
         } else {
-            String::new()
+            Cow::Borrowed("")
         }
     }
 
-    pub fn green(&self) -> String {
+    pub fn green(&self) -> Cow<str> {
         if self.enabled {
-            termion::color::Fg(termion::color::Green).to_string()
+            Cow::Owned(termion::color::Fg(termion::color::Green).to_string())
         } else {
-            String::new()
+            Cow::Borrowed("")
         }
     }
 
-    pub fn faded(&self) -> String {
+    pub fn faded(&self) -> Cow<str> {
         if self.enabled {
-            termion::style::Faint.to_string()
+            Cow::Owned(termion::style::Faint.to_string())
         } else {
-            String::new()
+            Cow::Borrowed("")
         }
     }
 }

@@ -9,9 +9,10 @@ readme = "README.md"
 license = "MIT"
 
 [dependencies]
-structopt = "0.2.10"
 nix = { version = "0.29.0", features = ["signal", "process"] }
 regex = "1.11.1"
 users = "0.11.0"
 termion = "4.0.4"
 failure = "0.1.2"
+clap = { version = "4.5.31", features = ["derive"] }
+clap_complete = "4.5.46"
