@@ -2,8 +2,6 @@
 
 > For the times where you want to terminate things. Humanely.
 
-[![Build Status][ci-badge]][ci]
-
 This command reads a list of processes from STDIN and shuts them all down
 gracefully. Commands will be matched using regular expressions.
 
@@ -53,7 +51,6 @@ fi
 ### Signals
 
 To list supported signals you can invoke the command with `--list-signals`.
-
 
 ### Matching on whole command
 
@@ -127,9 +124,6 @@ for you automatically.
 
 ## Copyright
 
-Copyright 2018 Magnus Bergmark <magnus.bergmark@gmail.com>
+Copyright 2018-2025 Magnus Bergmark <magnus.bergmark@gmail.com>
 
 Code is released under MIT license, see `LICENSE`.
-
-[ci-badge]: https://travis-ci.org/Mange/graceful-shutdown.svg?branch=master
-[ci]: https://travis-ci.org/Mange/graceful-shutdown
