@@ -3,15 +3,17 @@ name = "graceful-shutdown"
 description = "Terminate a list of processes and wait for them to exit."
 version = "1.0.0"
 authors = ["Magnus Bergmark <magnus.bergmark@gmail.com>"]
+edition = "2024"
 
 repository = "https://github.com/Mange/graceful-shutdown"
 readme = "README.md"
 license = "MIT"
 
 [dependencies]
-structopt = "0.2.10"
-nix = "0.11.0"
-regex = "1.0.4"
-users = "0.7.0"
-termion = "1.5.1"
-failure = "0.1.2"
+nix = { version = "0.29.0", features = ["signal", "process"] }
+regex = "1.11.1"
+users = "0.11.0"
+termion = "4.0.4"
+clap = { version = "4.5.31", features = ["derive"] }
+clap_complete = "4.5.46"
+snafu = "0.8.5"

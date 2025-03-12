@@ -1,4 +1,4 @@
-use processes::Process;
+use crate::processes::Process;
 use regex::RegexSet;
 
 #[derive(Debug, Clone, Copy)]

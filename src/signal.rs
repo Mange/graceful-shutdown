@@ -1,4 +1,5 @@
 use nix::sys::signal::Signal as NixSignal;
+use snafu::Snafu;
 use std::fmt;
 use std::str::FromStr;
 
@@ -10,47 +11,15 @@ impl Signal {
         NixSignal::iterator().map(Signal)
     }
 
-    pub fn name(self) -> String {
-        format!("SIG{}", self.basename())
+    pub fn name(&self) -> String {
+        self.0.to_string()
     }
 
-    pub fn basename(self) -> &'static str {
-        match self.0 {
-            NixSignal::SIGABRT => "ABRT",
-            NixSignal::SIGALRM => "ALRM",
-            NixSignal::SIGHUP => "HUP",
-            NixSignal::SIGINT => "INT",
-            NixSignal::SIGKILL => "KILL",
-            NixSignal::SIGQUIT => "QUIT",
-            NixSignal::SIGSTOP => "STOP",
-            NixSignal::SIGTERM => "TERM",
-            NixSignal::SIGUSR1 => "USR1",
-            NixSignal::SIGUSR2 => "USR2",
-            NixSignal::SIGILL => "ILL",
-            NixSignal::SIGTRAP => "TRAP",
-            NixSignal::SIGBUS => "BUS",
-            NixSignal::SIGFPE => "FPE",
-            NixSignal::SIGSEGV => "SEGV",
-            NixSignal::SIGPIPE => "PIPE",
-            NixSignal::SIGSTKFLT => "STKFLT",
-            NixSignal::SIGCHLD => "CHLD",
-            NixSignal::SIGCONT => "CONT",
-            NixSignal::SIGTSTP => "TSTP",
-            NixSignal::SIGTTIN => "TTIN",
-            NixSignal::SIGTTOU => "TTOU",
-            NixSignal::SIGURG => "URG",
-            NixSignal::SIGXCPU => "XCPU",
-            NixSignal::SIGXFSZ => "XFSZ",
-            NixSignal::SIGVTALRM => "VTALRM",
-            NixSignal::SIGPROF => "PROF",
-            NixSignal::SIGWINCH => "WINCH",
-            NixSignal::SIGIO => "IO",
-            NixSignal::SIGPWR => "PWR",
-            NixSignal::SIGSYS => "SYS",
-        }
+    pub fn basename(&self) -> String {
+        self.name().trim_start_matches("SIG").to_uppercase()
     }
 
-    pub fn number(self) -> i32 {
+    pub fn number(&self) -> i32 {
         self.0 as i32
     }
 }
@@ -73,25 +42,22 @@ impl From<Signal> for Option<NixSignal> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Snafu)]
 pub enum ParseError {
-    UnknownSignalName,
+    #[snafu(display("Unknown signal name: {}", name))]
+    UnknownSignalName { name: String },
 }
 
 impl FromStr for Signal {
     type Err = ParseError;
 
     fn from_str(sig: &str) -> Result<Signal, ParseError> {
-        let upper_sig = {
-            let mut s = String::from(sig);
-            s.make_ascii_uppercase();
-            s
-        };
-
+        let upper_sig = String::from(sig).to_ascii_uppercase();
         let signal_number: Option<i32> = sig.parse().ok();
 
         for signal in Signal::iterator() {
-            if signal.basename() == upper_sig || signal.name() == upper_sig
+            if signal.basename() == upper_sig
+                || signal.name() == upper_sig
                 || signal_number
                     .map(|num| signal.number() == num)
                     .unwrap_or(false)
@@ -100,7 +66,7 @@ impl FromStr for Signal {
             }
         }
 
-        Err(ParseError::UnknownSignalName)
+        UnknownSignalNameSnafu { name: sig }.fail()
     }
 }
 
@@ -131,15 +97,21 @@ mod tests {
     fn it_does_not_parse_invalid_strings() {
         assert_eq!(
             "foobar".parse::<Signal>(),
-            Err(ParseError::UnknownSignalName)
+            Err(ParseError::UnknownSignalName {
+                name: "foobar".to_string()
+            })
         );
         assert_eq!(
             "sigfoo".parse::<Signal>(),
-            Err(ParseError::UnknownSignalName)
+            Err(ParseError::UnknownSignalName {
+                name: "sigfoo".to_string()
+            })
         );
         assert_eq!(
             "31337".parse::<Signal>(),
-            Err(ParseError::UnknownSignalName)
+            Err(ParseError::UnknownSignalName {
+                name: "31337".to_string()
+            })
         );
     }
 
