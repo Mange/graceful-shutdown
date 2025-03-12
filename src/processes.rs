@@ -4,12 +4,12 @@ use crate::signal::Signal;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use snafu::{ResultExt, Snafu, Whatever};
-use std::fs::{self, DirEntry, File, ReadDir, read_dir};
-use std::io::Read;
+use std::fs::{self, DirEntry, ReadDir, read_dir, read_to_string};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use users::uid_t;
 
-pub type ProcIter = Box<dyn Iterator<Item = Result<Process, String>>>;
+pub type ProcIter = Box<dyn Iterator<Item = Result<Process, Whatever>>>;
 
 #[derive(Debug)]
 pub struct Process {
@@ -35,8 +35,8 @@ fn is_dir(entry: &DirEntry) -> bool {
 fn has_numeric_name(entry: &DirEntry) -> bool {
     entry
         .file_name()
-        .to_string_lossy()
-        .bytes()
+        .as_bytes()
+        .iter()
         .all(|b| b.is_ascii_digit())
 }
 
@@ -49,7 +49,7 @@ impl ProcessIterator {
 }
 
 impl Iterator for ProcessIterator {
-    type Item = Result<Process, String>;
+    type Item = Result<Process, Whatever>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Read next dir entry. If it's not a directory, then skip to the next one again.
@@ -69,7 +69,7 @@ impl Iterator for ProcessIterator {
 }
 
 impl Iterator for UserFilter {
-    type Item = Result<Process, String>;
+    type Item = Result<Process, Whatever>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.process_iter.next() {
@@ -99,21 +99,25 @@ impl Process {
         })
     }
 
-    fn from_entry(entry: &DirEntry) -> Result<Process, String> {
+    fn from_entry(entry: &DirEntry) -> Result<Process, Whatever> {
         let path = entry.path();
         let pid = {
             let basename = entry.file_name();
             let basename = basename.to_string_lossy();
             basename
                 .parse()
-                .map_err(|e| format!("Failed to parse PID in {}: {}", basename, e))?
+                .with_whatever_context(|e| format!("Failed to parse PID in {}: {}", basename, e))?
         };
 
-        let exe = fs::read_link(path.join("exe"))
-            .map_err(|e| format!("Failed to determine executable of PID {pid}: {e}"))?;
+        let exe = fs::read_link(path.join("exe")).with_whatever_context(|e| {
+            format!("Failed to determine executable of PID {pid}: {e}")
+        })?;
 
         let name = exe.file_name().unwrap_or(exe.as_os_str()).to_string_lossy();
-        let cmdline = parse_cmdline(&read_file(&path.join("cmdline"))?);
+        let cmdline = stringify_cmdline(
+            &read_to_string(path.join("cmdline"))
+                .with_whatever_context(|_| format!("Failed to read {}", path.display()))?,
+        );
 
         Ok(Process {
             name: name.into_owned(),
@@ -136,9 +140,7 @@ impl Process {
     }
 
     pub fn is_alive(&self) -> bool {
-        let mut proc_path = PathBuf::new();
-        proc_path.push("/");
-        proc_path.push("proc");
+        let mut proc_path = PathBuf::from("/proc");
         proc_path.push(self.pid.to_string());
 
         proc_path.exists()
@@ -172,24 +174,14 @@ pub enum KillError {
     UnexpectedError { message: String },
 }
 
-fn read_file(path: &Path) -> Result<String, String> {
-    // In Rust 1.26 we can use Path::read_to_string instead.
-    let mut string = String::new();
-    let mut file =
-        File::open(path).map_err(|e| format!("Could not open file {}: {}", path.display(), e))?;
-    file.read_to_string(&mut string)
-        .map_err(|e| format!("Could not read file {}: {}", path.display(), e))?;
-    Ok(string)
-}
-
-fn uid_of_file(path: &Path) -> Result<uid_t, String> {
+fn uid_of_file(path: &Path) -> Result<uid_t, Whatever> {
     use std::os::linux::fs::MetadataExt;
     path.metadata()
-        .map_err(|err| format!("Could not stat {}: {}", path.display(), err))
+        .with_whatever_context(|err| format!("Could not stat {}: {}", path.display(), err))
         .map(|metadata| metadata.st_uid())
 }
 
-fn parse_cmdline(cmdline: &str) -> String {
+fn stringify_cmdline(cmdline: &str) -> String {
     cmdline.replace("\0", " ").trim_end().to_owned()
 }
 
@@ -202,6 +194,6 @@ mod tests {
         let input = "/usr/bin/bash\0-c\0echo hello world\0";
         let expected_output = "/usr/bin/bash -c echo hello world";
 
-        assert_eq!(&parse_cmdline(input), expected_output);
+        assert_eq!(&stringify_cmdline(input), expected_output);
     }
 }

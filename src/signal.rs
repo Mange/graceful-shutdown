@@ -1,4 +1,5 @@
 use nix::sys::signal::Signal as NixSignal;
+use snafu::Snafu;
 use std::fmt;
 use std::str::FromStr;
 
@@ -41,21 +42,17 @@ impl From<Signal> for Option<NixSignal> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Snafu)]
 pub enum ParseError {
-    UnknownSignalName,
+    #[snafu(display("Unknown signal name: {}", name))]
+    UnknownSignalName { name: String },
 }
 
 impl FromStr for Signal {
     type Err = ParseError;
 
     fn from_str(sig: &str) -> Result<Signal, ParseError> {
-        let upper_sig = {
-            let mut s = String::from(sig);
-            s.make_ascii_uppercase();
-            s
-        };
-
+        let upper_sig = String::from(sig).to_ascii_uppercase();
         let signal_number: Option<i32> = sig.parse().ok();
 
         for signal in Signal::iterator() {
@@ -69,7 +66,7 @@ impl FromStr for Signal {
             }
         }
 
-        Err(ParseError::UnknownSignalName)
+        UnknownSignalNameSnafu { name: sig }.fail()
     }
 }
 
@@ -100,15 +97,21 @@ mod tests {
     fn it_does_not_parse_invalid_strings() {
         assert_eq!(
             "foobar".parse::<Signal>(),
-            Err(ParseError::UnknownSignalName)
+            Err(ParseError::UnknownSignalName {
+                name: "foobar".to_string()
+            })
         );
         assert_eq!(
             "sigfoo".parse::<Signal>(),
-            Err(ParseError::UnknownSignalName)
+            Err(ParseError::UnknownSignalName {
+                name: "sigfoo".to_string()
+            })
         );
         assert_eq!(
             "31337".parse::<Signal>(),
-            Err(ParseError::UnknownSignalName)
+            Err(ParseError::UnknownSignalName {
+                name: "31337".to_string()
+            })
         );
     }
 

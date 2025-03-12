@@ -48,8 +48,7 @@ pub struct CliOptions {
         short = 's',
         long = "terminate-signal",
         default_value = "term",
-        value_name = "SIGNAL",
-        value_parser = parse_signal
+        value_name = "SIGNAL"
     )]
     terminate_signal: Signal,
 
@@ -57,12 +56,7 @@ pub struct CliOptions {
     ///
     /// Signals can be specified using signal number or symbolic name (case insensitive, with or
     /// without the SIG prefix).
-    #[arg(
-        long = "kill-signal",
-        default_value = "kill",
-        value_name = "SIGNAL",
-        value_parser = parse_signal
-    )]
+    #[arg(long = "kill-signal", default_value = "kill", value_name = "SIGNAL")]
     kill_signal: Signal,
 
     /// Match the whole commandline for the process rather than the basename.
@@ -248,11 +242,6 @@ impl Colors {
             Cow::Borrowed("")
         }
     }
-}
-
-fn parse_signal(sig: &str) -> Result<Signal, String> {
-    sig.parse()
-        .map_err(|_| format!("Failed to parse \"{}\" as a signal name.", sig))
 }
 
 fn duration_from_secs_float(float: f64) -> Duration {
