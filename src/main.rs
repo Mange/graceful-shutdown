@@ -1,10 +1,8 @@
-#[macro_use]
-extern crate failure;
-
 extern crate clap;
 extern crate clap_complete;
 extern crate nix;
 extern crate regex;
+extern crate snafu;
 extern crate termion;
 extern crate users;
 
@@ -13,9 +11,10 @@ mod options;
 mod processes;
 mod signal;
 
+use snafu::{prelude::*, ErrorCompat, Whatever};
+
 use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
-use failure::{Error, ResultExt};
 use matcher::Matcher;
 use options::{CliOptions, Options, UserMode};
 use processes::{KillError, Process};
@@ -70,19 +69,16 @@ fn main() {
         Ok(true) => exit(0),
         Ok(false) => exit(1),
         Err(err) => {
-            if options.output_mode.show_normal() {
-                eprintln!(
-                    "{red}ERROR: {message}{reset}",
-                    message = err,
-                    red = options.colors.red(),
-                    reset = options.colors.reset(),
-                );
-                for (level, cause) in err.iter_causes().enumerate() {
+            if options.output_mode.is_normal() {
+                for (level, cause) in err.iter_chain().enumerate() {
+                    let prefix = if level == 0 { "Error:" } else { "Caused by:" };
+                    let indentation = format!("\n{indent:width$}", indent = "", width = level * 2);
+                    let message = cause.to_string().replace("\n", &indentation);
+
                     eprintln!(
-                        "{red}{indent:width$}Caused by: {cause}{reset}",
-                        cause = cause,
+                        "{red}{indent:width$}{prefix} {message}{reset}",
                         indent = "",
-                        width = (level + 1) * 2,
+                        width = level * 2,
                         red = options.colors.red(),
                         reset = options.colors.reset(),
                     );
@@ -93,13 +89,14 @@ fn main() {
     }
 }
 
-fn run(options: &Options) -> Result<bool, Error> {
+fn run(options: &Options) -> Result<bool, Whatever> {
     let matcher = Matcher::new(
-        load_patterns(options).context("Could not load patterns")?,
+        load_patterns(options).whatever_context("Could not load patterns")?,
         options.match_mode,
     );
 
-    let processes = all_processes(options, &matcher).context("Could not build process list")?;
+    let processes =
+        all_processes(options, &matcher).whatever_context("Could not build process list")?;
 
     // Time to shut them down
     if options.dry_run {
@@ -109,8 +106,8 @@ fn run(options: &Options) -> Result<bool, Error> {
     }
 }
 
-fn load_patterns(options: &Options) -> Result<RegexSet, Error> {
-    if options.output_mode.show_normal() && termion::is_tty(&::std::io::stdin()) {
+fn load_patterns(options: &Options) -> Result<RegexSet, Whatever> {
+    if options.output_mode.is_normal() && termion::is_tty(&::std::io::stdin()) {
         eprintln!(
             "{yellow}WARNING: Reading processlist from TTY stdin. Exit with ^D when you are done, or ^C to abort.{reset}",
             yellow = options.colors.yellow(),
@@ -130,14 +127,17 @@ fn load_patterns(options: &Options) -> Result<RegexSet, Error> {
     RegexSetBuilder::new(&patterns)
         .case_insensitive(true)
         .build()
-        .map_err(|err| err.into())
+        .whatever_context("Could not build regexes")
 }
 
-fn all_processes(options: &Options, matcher: &Matcher) -> Result<Vec<Process>, Error> {
+fn all_processes(options: &Options, matcher: &Matcher) -> Result<Vec<Process>, Whatever> {
     let iter = match &options.user_mode {
         UserMode::Everybody => Process::all()?,
         UserMode::OnlyMe => Process::all_from_user(users::get_current_uid())?,
-        UserMode::Only(name) => Process::all_from_user(find_user_by_name(name)?)?,
+        UserMode::Only(name) => Process::all_from_user(
+            find_user_by_name(name)
+                .with_whatever_context(|_| format!("Could not find username {name}"))?,
+        )?,
     };
 
     Ok(iter
@@ -146,15 +146,17 @@ fn all_processes(options: &Options, matcher: &Matcher) -> Result<Vec<Process>, E
         .collect::<Vec<_>>())
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Snafu)]
 pub enum UserError {
-    #[fail(display = "Could not find user with name \"{}\"", _0)]
-    NotFound(String),
+    #[snafu(display("Could not find user with name \"{name}\""))]
+    NotFound { name: String },
 }
 
 fn find_user_by_name(name: &str) -> Result<uid_t, UserError> {
     users::get_user_by_name(name)
-        .ok_or_else(|| UserError::NotFound(name.to_owned()))
+        .ok_or_else(|| UserError::NotFound {
+            name: name.to_owned(),
+        })
         .map(|user| user.uid())
 }
 
@@ -165,9 +167,9 @@ fn strip_comment(line: String) -> String {
     }
 }
 
-fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, Error> {
+fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, Whatever> {
     // If we're not rendering anything, might as well skip the iteration completely.
-    if !options.output_mode.show_normal() {
+    if !options.output_mode.is_normal() {
         return Ok(true);
     }
 
@@ -182,7 +184,7 @@ fn dry_run(options: &Options, processes: &[Process]) -> Result<bool, Error> {
     Ok(true)
 }
 
-fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Error> {
+fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Whatever> {
     let mut success = true;
 
     // Try to terminate all the processes. If any process failed to receive the signal, then remove
@@ -213,7 +215,7 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Erro
             processes.retain(|process| {
                 let is_alive = process.is_alive();
 
-                if options.output_mode.show_verbose() && !is_alive {
+                if options.output_mode.is_verbose() && !is_alive {
                     eprintln!(
                         "Process shut down: {process}",
                         process = human_process_description(options, process),
@@ -230,7 +232,7 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Erro
 
         // Time is up. Kill remaining processes.
         if options.kill {
-            if options.output_mode.show_verbose() {
+            if options.output_mode.is_verbose() {
                 eprintln!(
                     "{red}Timeout reached. Forcefully shutting down processes.{reset}",
                     red = options.colors.red(),
@@ -244,14 +246,14 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Erro
                 }
             }
         } else {
-            if options.output_mode.show_normal() {
+            if options.output_mode.is_normal() {
                 eprintln!(
                     "{yellow}WARNING: Some processes are still alive.{reset}",
                     yellow = options.colors.yellow(),
                     reset = options.colors.reset()
                 );
             }
-            if options.output_mode.show_verbose() {
+            if options.output_mode.is_verbose() {
                 for process in &processes {
                     eprintln!(
                         "Process {process}",
@@ -267,7 +269,7 @@ fn real_run(options: &Options, mut processes: Vec<Process>) -> Result<bool, Erro
 }
 
 fn verbose_signal_message(signal: Signal, options: &Options, process: &Process) {
-    if options.output_mode.show_verbose() {
+    if options.output_mode.is_verbose() {
         eprintln!(
             "Sending {signal} to process {process}",
             signal = signal,

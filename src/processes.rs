@@ -1,9 +1,9 @@
 extern crate users;
 
-use failure::Error;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use signal::Signal;
+use snafu::{ResultExt, Snafu, Whatever};
 use std::fs::{self, read_dir, DirEntry, File, ReadDir};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -41,10 +41,9 @@ fn has_numeric_name(entry: &DirEntry) -> bool {
 }
 
 impl ProcessIterator {
-    fn new() -> Result<ProcessIterator, Error> {
+    fn new() -> Result<ProcessIterator, Whatever> {
         Ok(ProcessIterator {
-            read_dir: read_dir("/proc")
-                .map_err(|err| format_err!("Failed to open /proc: {}", err))?,
+            read_dir: read_dir("/proc").whatever_context("Failed to read /proc")?,
         })
     }
 }
@@ -87,11 +86,11 @@ impl Iterator for UserFilter {
 }
 
 impl Process {
-    pub fn all() -> Result<ProcIter, Error> {
+    pub fn all() -> Result<ProcIter, Whatever> {
         ProcessIterator::new().map(|iter| Box::new(iter) as ProcIter)
     }
 
-    pub fn all_from_user(user: uid_t) -> Result<ProcIter, Error> {
+    pub fn all_from_user(user: uid_t) -> Result<ProcIter, Whatever> {
         ProcessIterator::new().map(|iter| {
             Box::new(UserFilter {
                 user,
@@ -154,21 +153,23 @@ impl Process {
             Err(Errno::EPERM) => Err(KillError::NoPermission),
             Err(Errno::ESRCH) => Err(KillError::DoesNotExist),
 
-            Err(errno) => Err(KillError::UnexpectedError(format!("errno {}", errno))),
+            Err(errno) => Err(KillError::UnexpectedError {
+                message: format!("errno {}", errno),
+            }),
         }
     }
 }
 
-#[derive(Debug, Clone, Fail)]
+#[derive(Debug, Clone, Snafu)]
 pub enum KillError {
-    #[fail(display = "Invalid signal")]
+    #[snafu(display("Invalid signal"))]
     InvalidSignal,
-    #[fail(display = "Insufficient permission to send signal to this process")]
+    #[snafu(display("Insufficient permission to send signal to this process"))]
     NoPermission,
-    #[fail(display = "Cannot find process")]
+    #[snafu(display("Cannot find process"))]
     DoesNotExist,
-    #[fail(display = "Unexpected error: {}", _0)]
-    UnexpectedError(String),
+    #[snafu(display("Unexpected error: {message}"))]
+    UnexpectedError { message: String },
 }
 
 fn read_file(path: &Path) -> Result<String, String> {
