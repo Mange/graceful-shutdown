@@ -11,7 +11,7 @@ mod options;
 mod processes;
 mod signal;
 
-use snafu::{prelude::*, ErrorCompat, Whatever};
+use snafu::{ErrorCompat, Whatever, prelude::*};
 
 use crate::matcher::Matcher;
 use crate::options::{CliOptions, Options, UserMode};

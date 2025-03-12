@@ -4,7 +4,7 @@ use crate::signal::Signal;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use snafu::{ResultExt, Snafu, Whatever};
-use std::fs::{self, read_dir, DirEntry, File, ReadDir};
+use std::fs::{self, DirEntry, File, ReadDir, read_dir};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use users::uid_t;
