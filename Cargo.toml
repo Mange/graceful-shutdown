@@ -3,7 +3,7 @@ name = "graceful-shutdown"
 description = "Terminate a list of processes and wait for them to exit."
 version = "1.0.0"
 authors = ["Magnus Bergmark <magnus.bergmark@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 repository = "https://github.com/Mange/graceful-shutdown"
 readme = "README.md"
