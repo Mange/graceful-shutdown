@@ -1,10 +1,10 @@
 extern crate termion;
 extern crate users;
 
+use crate::matcher::MatchMode;
+use crate::signal::Signal;
 use clap::Parser;
 use clap_complete::Shell;
-use matcher::MatchMode;
-use signal::Signal;
 use std::{borrow::Cow, time::Duration};
 
 #[derive(Debug, Clone, Copy)]

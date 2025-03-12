@@ -1,8 +1,8 @@
 extern crate users;
 
+use crate::signal::Signal;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
-use signal::Signal;
 use snafu::{ResultExt, Snafu, Whatever};
 use std::fs::{self, read_dir, DirEntry, File, ReadDir};
 use std::io::Read;

@@ -13,13 +13,13 @@ mod signal;
 
 use snafu::{prelude::*, ErrorCompat, Whatever};
 
+use crate::matcher::Matcher;
+use crate::options::{CliOptions, Options, UserMode};
+use crate::processes::{KillError, Process};
+use crate::signal::Signal;
 use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
-use matcher::Matcher;
-use options::{CliOptions, Options, UserMode};
-use processes::{KillError, Process};
 use regex::{RegexSet, RegexSetBuilder};
-use signal::Signal;
 use std::io;
 use std::io::BufRead;
 use std::time::{Duration, Instant};
@@ -300,7 +300,7 @@ fn send_with_error_handling(signal: Signal, options: &Options, process: &Process
 }
 
 fn human_process_description(options: &Options, process: &Process) -> String {
-    use matcher::MatchMode;
+    use crate::matcher::MatchMode;
 
     match options.match_mode {
         MatchMode::Basename => format!(
